@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#4338ca" />
+      <stop offset="100%" stop-color="#312e81" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#1e1b4b" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Subtle glow circle -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="white" stroke-opacity="0.08" stroke-width="32" />
+
+  <!-- Main Shield / Retention Crest -->
+  <g filter="url(#shadow)">
+    <!-- Protective Shield Outer -->
+    <path d="M256 108 L376 156 V264 C376 336 324 396 256 424 C188 396 136 336 136 264 V156 Z" 
+          fill="#1e1b4b" fill-opacity="0.5" stroke="url(#accentGrad)" stroke-width="12" stroke-linejoin="round" />
+
+    <!-- Pulse / Activity Waveform inside -->
+    <path d="M176 272 H212 L236 208 L268 336 L296 248 L314 272 H336" 
+          fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Customer / Spark node -->
+    <circle cx="256" cy="168" r="16" fill="#38bdf8" />
+  </g>
+
+  <!-- Status indicators -->
+  <circle cx="396" cy="116" r="14" fill="#10b981" />
+</svg>
