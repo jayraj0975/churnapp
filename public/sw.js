@@ -19,7 +19,7 @@ self.addEventListener('install', (event) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
         console.warn('PWA: Some assets could not be cached immediately:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -34,7 +34,7 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    })
   );
 });
 
