@@ -1,15 +1,11 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { calculateChurnPrediction, simulateWhatIf, MODEL_METRICS } from './src/lib/churnEngine.ts';
 import { CustomerProfile, WhatIfAdjustments } from './src/types.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -46,7 +42,7 @@ app.post('/api/predict', (req, res) => {
 });
 
 // What-If Simulation API
-app.post('/api/simulate-what-if', (req, res) => {
+app.post(['/api/simulate-what-if', '/api/simulate'], (req, res) => {
   try {
     const { profile, adjustments } = req.body as {
       profile: CustomerProfile;
@@ -63,7 +59,7 @@ app.post('/api/simulate-what-if', (req, res) => {
 });
 
 // Model Metadata & Diagnostics API
-app.get('/api/model-info', (req, res) => {
+app.get(['/api/model-info', '/api/metrics'], (req, res) => {
   res.json(MODEL_METRICS);
 });
 
