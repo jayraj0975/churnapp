@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { CustomerProfile, PredictionResult, RetentionStrategyResponse } from './types';
-import { CUSTOMER_PRESETS, SAMPLE_PORTFOLIO, calculateChurnPrediction } from './lib/churnEngine';
+import { CUSTOMER_PRESETS, MODEL_METRICS, SAMPLE_PORTFOLIO, buildFallbackStrategy, calculateChurnPrediction } from './lib/churnEngine';
 import { Header, ActiveTab } from './components/Header';
 import { CustomerForm } from './components/CustomerForm';
 import { PredictionGauge } from './components/PredictionGauge';
@@ -25,7 +25,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('predictor');
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(CUSTOMER_PRESETS[0].id);
   const [currentProfile, setCurrentProfile] = useState<CustomerProfile>(CUSTOMER_PRESETS[0].profile);
-  const [threshold, setThreshold] = useState<number>(0.50);
+  const [threshold, setThreshold] = useState<number>(MODEL_METRICS.bestF1Threshold);
   const [portfolio, setPortfolio] = useState<CustomerProfile[]>(SAMPLE_PORTFOLIO);
 
   // Retention Modal & AI Strategy State
@@ -85,10 +85,7 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          profile: currentProfile,
-          prediction,
-        }),
+        body: JSON.stringify({ profile: currentProfile }),
       });
 
       if (!response.ok) {
@@ -100,31 +97,7 @@ export default function App() {
     } catch (err) {
       console.warn('API call error, using local fallback:', err);
       // Fallback in case of server error
-      setRetentionData({
-        customerName: currentProfile.name,
-        riskSummary: `${currentProfile.name} has a ${prediction.churnProbability}% risk of cancellation primarily driven by ${currentProfile.contract} terms and billing sensitivity.`,
-        recommendedIncentives: [
-          {
-            title: '1-Year Term Commitment Special',
-            impactEstimate: '-28% Churn Risk',
-            costToBusiness: '$10/mo credit for 6 months',
-            roiVerdict: `Protects $${prediction.annualRevenueAtRisk}/yr recurring account revenue.`,
-          },
-          {
-            title: 'Free 24/7 Tech Support & Security Bundle',
-            impactEstimate: '-14% Churn Risk',
-            costToBusiness: '$0 marginal software cost',
-            roiVerdict: 'Immediate product value anchor and loyalty driver.',
-          },
-        ],
-        actionScript: {
-          channel: prediction.churnProbability > 70 ? 'Phone Call' : 'Email',
-          subjectOrOpener: `Special Loyalty Upgrade Offer for ${currentProfile.name}`,
-          messageBody: `Hi ${currentProfile.name},\n\nWe want to thank you for choosing our service. We are offering you a guaranteed 12-month renewal rate reduction with complimentary 24/7 technical support.\n\nLet us know if you'd like us to activate this for your account.`,
-        },
-        timingRecommendation: 'Reach out within 24 to 48 hours.',
-        aiGenerated: false,
-      });
+      setRetentionData(buildFallbackStrategy(currentProfile, prediction));
     } finally {
       setIsLoadingRetention(false);
     }
@@ -197,12 +170,12 @@ export default function App() {
 
                   <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Estimated CLV
+                      Expected annual loss
                     </span>
                     <span className="text-lg font-extrabold text-indigo-700 mt-0.5 block">
-                      ${prediction.estimatedClv}
+                      ${prediction.expectedAnnualLoss}
                     </span>
-                    <span className="text-[10px] text-slate-400">Lifetime value</span>
+                    <span className="text-[10px] text-slate-400">Annual billing x churn probability</span>
                   </div>
                 </div>
 
@@ -245,7 +218,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Explainable AI: Feature Attributions / SHAP Waterfall */}
+            {/* Feature contributions: coefficient x deviation from the average customer */}
             <FeatureContributions
               topRiskDrivers={prediction.topRiskDrivers}
               topProtectiveFactors={prediction.topProtectiveFactors}

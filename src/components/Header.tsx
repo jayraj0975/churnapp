@@ -37,11 +37,11 @@ export const Header: React.FC<HeaderProps> = ({
                 </h1>
                 <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                   <Sparkles className="w-3 h-3 text-indigo-600" />
-                  Model v2.4 ML
+                  Logistic regression
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Predict attrition probability, analyze SHAP risk drivers, and simulate retention playbooks.
+                Predict churn probability, see what drives it, and test retention what-ifs.
               </p>
             </div>
           </div>

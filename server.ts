@@ -1,13 +1,14 @@
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
-import { calculateChurnPrediction, simulateWhatIf, MODEL_METRICS } from './src/lib/churnEngine.ts';
+import { buildFallbackStrategy, calculateChurnPrediction, simulateWhatIf, standardLevers, MODEL_METRICS } from './src/lib/churnEngine.ts';
+import { validateAdjustments, validateProfile } from './src/lib/validate.ts';
 import { CustomerProfile, WhatIfAdjustments } from './src/types.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50kb' }));
 
 // Lazy-initialized Gemini client
 let genAIClient: GoogleGenAI | null = null;
@@ -28,34 +29,21 @@ app.get('/api/health', (req, res) => {
 
 // Model Prediction API
 app.post('/api/predict', (req, res) => {
-  try {
-    const profile = req.body as CustomerProfile;
-    const threshold = req.body.threshold !== undefined ? Number(req.body.threshold) : 0.50;
-    if (!profile) {
-      return res.status(400).json({ error: 'Customer profile required' });
-    }
-    const result = calculateChurnPrediction(profile, threshold);
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Prediction failed' });
+  const error = validateProfile(req.body);
+  if (error) return res.status(400).json({ error });
+  const threshold = req.body.threshold === undefined ? 0.5 : Number(req.body.threshold);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    return res.status(400).json({ error: 'threshold must be a number between 0 and 1' });
   }
+  return res.json(calculateChurnPrediction(req.body as CustomerProfile, threshold));
 });
 
 // What-If Simulation API
 app.post(['/api/simulate-what-if', '/api/simulate'], (req, res) => {
-  try {
-    const { profile, adjustments } = req.body as {
-      profile: CustomerProfile;
-      adjustments: WhatIfAdjustments;
-    };
-    if (!profile || !adjustments) {
-      return res.status(400).json({ error: 'Profile and adjustments required' });
-    }
-    const simulation = simulateWhatIf(profile, adjustments);
-    return res.json(simulation);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Simulation failed' });
-  }
+  const { profile, adjustments } = req.body ?? {};
+  const error = validateProfile(profile) ?? validateAdjustments(adjustments);
+  if (error) return res.status(400).json({ error });
+  return res.json(simulateWhatIf(profile as CustomerProfile, adjustments as WhatIfAdjustments));
 });
 
 // Model Metadata & Diagnostics API
@@ -63,112 +51,50 @@ app.get(['/api/model-info', '/api/metrics'], (req, res) => {
   res.json(MODEL_METRICS);
 });
 
-// Retention Strategy Generator (Gemini AI with Intelligent Fallback)
+// Retention Strategy Generator (Gemini, with a deterministic fallback).
+// The prediction and the impact figures are computed here from the model, never
+// taken from the client and never invented by the LLM.
 app.post('/api/retention-strategy', async (req, res) => {
-  try {
-    const { profile, prediction } = req.body;
-    if (!profile || !prediction) {
-      return res.status(400).json({ error: 'Profile and prediction data are required' });
+  const profile = req.body?.profile;
+  const error = validateProfile(profile);
+  if (error) return res.status(400).json({ error });
+
+  const customer = profile as CustomerProfile;
+  const prediction = calculateChurnPrediction(customer);
+  const levers = standardLevers(customer).slice(0, 3);
+
+  const ai = getGenAIClient();
+  if (ai) {
+    try {
+      const prompt = `You are a customer-retention strategist. Write a retention plan for one customer.
+Use ONLY the numbers given below. Do not invent statistics, percentages or prices.
+
+Customer: ${customer.name}, tenure ${customer.tenure} months, ${customer.contract} contract, ${customer.internetService} internet,
+tech support ${customer.techSupport ? 'yes' : 'no'}, online security ${customer.onlineSecurity ? 'yes' : 'no'},
+$${customer.monthlyCharges}/month, pays by ${customer.paymentMethod}.
+Model-predicted churn probability: ${prediction.churnProbability}% (${prediction.riskLevel} risk).
+Top risk drivers: ${prediction.topRiskDrivers.map((d) => d.featureName).join('; ') || 'none'}.
+Model what-if results (change in predicted churn, in points): ${
+        levers.map((l) => `${l.title}: ${l.delta.toFixed(1)}`).join('; ') || 'no lever lowers the risk'
+      }.
+
+Return JSON only, with this shape:
+{"customerName": string, "riskSummary": string (1-2 sentences),
+ "recommendedIncentives": [{"title": string, "impactEstimate": string (quote the what-if number above), "costToBusiness": string (say it is an example), "roiVerdict": string}],
+ "actionScript": {"channel": "Email" | "Phone Call", "subjectOrOpener": string, "messageBody": string},
+ "timingRecommendation": string, "aiGenerated": true}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json' },
+      });
+      if (response.text) return res.json(JSON.parse(response.text));
+    } catch (geminiErr) {
+      console.warn('Gemini call failed, using the deterministic plan:', geminiErr);
     }
-
-    const ai = getGenAIClient();
-    if (ai) {
-      try {
-        const prompt = `You are an elite Customer Retention Data Science and Customer Success strategist.
-Analyze this at-risk customer from our Churn Prediction Model:
-Customer Name: ${profile.name} (ID: ${profile.id})
-Tenure: ${profile.tenure} months
-Contract: ${profile.contract}
-Internet Service: ${profile.internetService}
-Tech Support: ${profile.techSupport ? 'Yes' : 'No'}
-Online Security: ${profile.onlineSecurity ? 'Yes' : 'No'}
-Monthly Charges: $${profile.monthlyCharges}
-Payment Method: ${profile.paymentMethod}
-Churn Probability: ${prediction.churnProbability}% (${prediction.riskLevel} Risk)
-Top Risk Drivers: ${prediction.topRiskDrivers.map((d: any) => d.featureName).join(', ')}
-
-Return a JSON object ONLY with the following schema:
-{
-  "customerName": "${profile.name}",
-  "riskSummary": "Concise 1-2 sentence executive summary of why this customer is in jeopardy",
-  "recommendedIncentives": [
-    {
-      "title": "Short title of offer",
-      "impactEstimate": "e.g. -25% churn risk reduction",
-      "costToBusiness": "e.g. $10/month for 3 months or $0 software cost",
-      "roiVerdict": "High ROI / Immediate positive payback"
-    }
-  ],
-  "actionScript": {
-    "channel": "Email" or "Phone Call",
-    "subjectOrOpener": "Compelling subject line or opening phone hook",
-    "messageBody": "Polite, empathetic, value-packed outreach message tailored specifically to their situation and contract/tech support setup."
-  },
-  "timingRecommendation": "e.g. Initiate within 24-48 hours before next billing cycle",
-  "aiGenerated": true
-}`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.6-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          },
-        });
-
-        if (response.text) {
-          const parsed = JSON.parse(response.text);
-          return res.json(parsed);
-        }
-      } catch (geminiErr) {
-        console.warn('Gemini API call failed, falling back to heuristic playbook:', geminiErr);
-      }
-    }
-
-    // Heuristic playbook fallback (instant, zero failure)
-    const isFiber = profile.internetService === 'Fiber optic';
-    const isMonthToMonth = profile.contract === 'Month-to-month';
-    const fallbackResponse = {
-      customerName: profile.name,
-      riskSummary: `${profile.name} exhibits a ${prediction.churnProbability}% churn likelihood due to ${
-        isMonthToMonth ? 'month-to-month flexibility' : 'pricing sensitivity'
-      } and ${!profile.techSupport ? 'unmonitored technical friction' : 'early tenure volatility'}.`,
-      recommendedIncentives: [
-        {
-          title: isMonthToMonth ? '1-Year Annual Commitment Promotion' : 'Loyalty Renewal Credit',
-          impactEstimate: isMonthToMonth ? '-28% Churn Probability' : '-18% Churn Probability',
-          costToBusiness: '$10/mo credit for 6 months ($60 total investment)',
-          roiVerdict: `High ROI: Protects $${prediction.annualRevenueAtRisk}/yr in recurring revenue.`,
-        },
-        {
-          title: !profile.techSupport ? 'Complimentary 24/7 Tech Support Bundle' : 'Complimentary Security & Cloud Backup Suite',
-          impactEstimate: '-14% Churn Probability',
-          costToBusiness: '$0 incremental operational cost (software provisioning)',
-          roiVerdict: 'Immediate Value Lock-in: Deepens device ecosystem integration.',
-        },
-        {
-          title: 'Automated Billing Transition Incentive',
-          impactEstimate: '-10% Involuntary Payment Churn',
-          costToBusiness: 'One-time $20 statement billing credit',
-          roiVerdict: 'Permanent friction reduction for monthly renewals.',
-        },
-      ],
-      actionScript: {
-        channel: prediction.churnProbability > 70 ? 'Phone Call' : 'Email',
-        subjectOrOpener:
-          prediction.churnProbability > 70
-            ? `Hi ${profile.name.split(' ')[0]}, this is your dedicated Account Specialist checking in on your connection experience.`
-            : `Exclusive VIP Loyalty Renewal: Upgrade your plan with premium perks for ${profile.name}`,
-        messageBody: `Dear ${profile.name},\n\nThank you for being with us over the past ${profile.tenure} months. We noticed you're currently on our ${profile.contract} plan with ${profile.internetService} service. We value your membership and want to ensure you are getting optimal performance.\n\nToday, we'd like to offer you an exclusive renewal package: lock in a discounted rate guarantee for the next 12 months with complimentary 24/7 priority technical support included.\n\nPlease let us know if you'd like us to apply this directly to your next invoice.`,
-      },
-      timingRecommendation: 'Reach out within 48 hours prior to next monthly billing cycle.',
-      aiGenerated: false,
-    };
-
-    return res.json(fallbackResponse);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to generate retention strategy' });
   }
+  return res.json(buildFallbackStrategy(customer, prediction));
 });
 
 // PWA Manifest and Service Worker routes with CORS for PWABuilder & external scanners

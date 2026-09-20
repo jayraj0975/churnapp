@@ -185,7 +185,7 @@ export const RetentionModal: React.FC<RetentionModalProps> = ({
           ) : (
             <div className="text-center py-8">
               <p className="text-xs text-slate-500 mb-4">
-                Click below to generate an AI-powered customer outreach script and personalized retention package.
+                Click below to generate a customer outreach script and retention package. Impact figures come from the model; the wording is written by Gemini when an API key is set.
               </p>
               <button
                 type="button"

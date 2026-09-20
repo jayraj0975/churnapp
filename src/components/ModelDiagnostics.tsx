@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MODEL_METRICS } from '../lib/churnEngine';
+import { MODEL_METRICS, metricsAt } from '../lib/churnEngine';
 import { Brain, CheckCircle2, AlertCircle, BarChart3, Sliders, Info, ShieldCheck } from 'lucide-react';
 
 interface ModelDiagnosticsProps {
@@ -11,6 +11,8 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
   threshold,
   onThresholdChange,
 }) => {
+  const m = metricsAt(threshold);
+  const pctFmt = (x: number) => `${(x * 100).toFixed(1)}%`;
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-6">
       <div className="border-b border-slate-100 pb-4">
@@ -19,7 +21,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
           Model Architecture & Diagnostics
         </h2>
         <p className="text-xs text-slate-500 mt-0.5">
-          Validation metrics, confusion matrix, ROC-AUC, and global feature attribution weights.
+          Measured on a held-out test set the model never saw during fitting. Nothing on this page is hand-entered.
         </p>
       </div>
 
@@ -27,12 +29,12 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-            Validation Accuracy
+            Accuracy
           </span>
           <span className="text-2xl font-extrabold text-indigo-600 mt-0.5 block">
-            {MODEL_METRICS.accuracy}
+            {pctFmt(m.accuracy)}
           </span>
-          <span className="text-[10px] text-slate-400">1,409 hold-out test set</span>
+          <span className="text-[10px] text-slate-400">{MODEL_METRICS.split.split(' / ')[1]}, at threshold {threshold.toFixed(2)}</span>
         </div>
 
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -40,9 +42,9 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
             Precision
           </span>
           <span className="text-2xl font-extrabold text-emerald-600 mt-0.5 block">
-            {MODEL_METRICS.precision}
+            {pctFmt(m.precision)}
           </span>
-          <span className="text-[10px] text-slate-400">True positive accuracy</span>
+          <span className="text-[10px] text-slate-400">Of flagged customers, share who churn</span>
         </div>
 
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -50,9 +52,9 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
             Recall (Sensitivity)
           </span>
           <span className="text-2xl font-extrabold text-amber-600 mt-0.5 block">
-            {MODEL_METRICS.recall}
+            {pctFmt(m.recall)}
           </span>
-          <span className="text-[10px] text-slate-400">Actual churn capture rate</span>
+          <span className="text-[10px] text-slate-400">Of churners, share we flag</span>
         </div>
 
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -60,9 +62,9 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
             ROC-AUC Score
           </span>
           <span className="text-2xl font-extrabold text-indigo-700 mt-0.5 block">
-            {MODEL_METRICS.aucRoc}
+            {MODEL_METRICS.rocAuc.toFixed(3)}
           </span>
-          <span className="text-[10px] text-slate-400">High discriminative power</span>
+          <span className="text-[10px] text-slate-400">95% interval {MODEL_METRICS.rocAucCi95[0].toFixed(2)}-{MODEL_METRICS.rocAucCi95[1].toFixed(2)}</span>
         </div>
       </div>
 
@@ -91,7 +93,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
         />
         <div className="flex justify-between text-[10px] text-indigo-700 font-medium">
           <span>20% (Aggressive Early Intervention)</span>
-          <span>50% (Balanced Optimal F1)</span>
+          <span>{(MODEL_METRICS.bestF1Threshold * 100).toFixed(0)}% (Best F1)</span>
           <span>80% (Conservative / High Precision)</span>
         </div>
       </div>
@@ -103,9 +105,9 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Confusion Matrix (N = {MODEL_METRICS.confusionMatrix.total})
+              Confusion Matrix (N = {m.total})
             </h3>
-            <span className="text-[11px] text-slate-400">Threshold: 0.50</span>
+            <span className="text-[11px] text-slate-400">Threshold: {threshold.toFixed(2)}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-center text-xs">
@@ -115,7 +117,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
                 True Negatives (TN)
               </span>
               <span className="text-xl font-bold text-slate-900 block mt-0.5">
-                {MODEL_METRICS.confusionMatrix.trueNegative}
+                {m.tn}
               </span>
               <span className="text-[10px] text-slate-400">Correctly predicted Stay</span>
             </div>
@@ -126,7 +128,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
                 False Positives (FP)
               </span>
               <span className="text-xl font-bold text-slate-900 block mt-0.5">
-                {MODEL_METRICS.confusionMatrix.falsePositive}
+                {m.fp}
               </span>
               <span className="text-[10px] text-slate-400">Type I Error (False Alarm)</span>
             </div>
@@ -137,7 +139,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
                 False Negatives (FN)
               </span>
               <span className="text-xl font-bold text-slate-900 block mt-0.5">
-                {MODEL_METRICS.confusionMatrix.falseNegative}
+                {m.fn}
               </span>
               <span className="text-[10px] text-slate-400">Type II Error (Missed Churn)</span>
             </div>
@@ -148,7 +150,7 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
                 True Positives (TP)
               </span>
               <span className="text-xl font-bold text-slate-900 block mt-0.5">
-                {MODEL_METRICS.confusionMatrix.truePositive}
+                {m.tp}
               </span>
               <span className="text-[10px] text-slate-400">Correctly flagged Churn</span>
             </div>
@@ -160,9 +162,9 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <BarChart3 className="w-4 h-4 text-indigo-600" />
-              Global Model Feature Importance
+              Global Feature Importance
             </h3>
-            <span className="text-[11px] text-slate-400">Gini Impurity / Gain</span>
+            <span className="text-[11px] text-slate-400">Swing in log-odds per 1 SD</span>
           </div>
 
           <div className="space-y-2">
@@ -195,13 +197,16 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
           Mathematical Scoring Engine
         </span>
         <p className="leading-relaxed">
-          The probability is modeled via a calibrated sigmoid transformation over customer hazard features:
+          {MODEL_METRICS.algorithm}, trained on {MODEL_METRICS.dataset}. Split: {MODEL_METRICS.split}. Because it is
+          unweighted, its probabilities are calibrated: a customer scored 70% is one of a group of which about 70% left.
         </p>
         <div className="p-2 bg-white rounded border border-slate-200 font-mono text-[11px] text-slate-800">
-          P(Churn) = 1 / (1 + exp(-[β₀ + β_contract + β_tenure(t) + β_services + β_billing + β_charges]))
+          P(churn) = 1 / (1 + exp(-(&beta;&#8320; + &Sigma; &beta;&#7522; x&#7522;)))
         </div>
         <p className="text-[11px] text-slate-500">
-          Trained on empirical Telecom Customer dataset records with cross-validation and probability calibration.
+          PR-AUC {MODEL_METRICS.prAuc.toFixed(3)} (a no-skill model scores {MODEL_METRICS.testChurnRate.toFixed(2)}). Brier {MODEL_METRICS.brier.toFixed(3)}{' '}
+          against {MODEL_METRICS.brierNoSkill.toFixed(3)} for always predicting the average. The data is observational, so
+          drivers and what-if results describe association, not cause.
         </p>
       </div>
     </div>

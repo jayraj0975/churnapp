@@ -1,289 +1,180 @@
-import { CustomerProfile, PredictionResult, RiskFactorContribution, RiskLevel, WhatIfAdjustments } from '../types';
+import model from './model.json';
+import {
+  CustomerProfile,
+  PredictionResult,
+  RiskFactorContribution,
+  RetentionStrategyResponse,
+  RiskLevel,
+  WhatIfAdjustments,
+} from '../types';
 
 /**
- * Calibrated Logistic Regression & Ensemble Weights for Telco Churn.
- * Based on empirical Telco Churn statistical parameters.
+ * Scoring engine.
+ *
+ * The model is a logistic regression trained offline by `scripts/train_model.py`
+ * on IBM's Telco Customer Churn data and exported to `model.json` in raw units,
+ * so scoring is just `sigmoid(intercept + sum(coefficient * value))`. Nothing
+ * here is hand-tuned. `tests/engine.test.ts` checks these predictions against
+ * scikit-learn's to 1e-9.
  */
-const BASELINE_INTERCEPT = -0.75;
 
-export function calculateChurnPrediction(
-  profile: CustomerProfile,
-  threshold: number = 0.50
-): PredictionResult {
-  let logit = BASELINE_INTERCEPT;
-  const factors: RiskFactorContribution[] = [];
+type Model = typeof model;
+const M: Model = model;
 
-  // 1. Contract Type Impact
-  if (profile.contract === 'Month-to-month') {
-    const impact = 0.82;
-    logit += impact;
-    factors.push({
-      featureName: 'Month-to-Month Contract',
-      category: 'Contract',
-      impactPercentage: 27,
-      direction: 'increases_risk',
-      description: 'Lack of long-term contract allows instant cancellation without commitment barrier.',
+/** Risk bands on the predicted probability, in percent. The base rate is ~27%. */
+export const RISK_BANDS = { moderateFrom: 20, highFrom: 50 };
+
+const sigmoid = (z: number) => 1 / (1 + Math.exp(-z));
+
+/** A profile as the model's numeric feature vector. */
+export function featureVector(p: CustomerProfile): Record<string, number> {
+  return {
+    tenure: p.tenure,
+    monthlyCharges: p.monthlyCharges,
+    seniorCitizen: +p.seniorCitizen,
+    partner: +p.partner,
+    dependents: +p.dependents,
+    phoneService: +p.phoneService,
+    multipleLines: +p.multipleLines,
+    onlineSecurity: +p.onlineSecurity,
+    onlineBackup: +p.onlineBackup,
+    deviceProtection: +p.deviceProtection,
+    techSupport: +p.techSupport,
+    streamingTV: +p.streamingTV,
+    streamingMovies: +p.streamingMovies,
+    paperlessBilling: +p.paperlessBilling,
+    contractOneYear: +(p.contract === 'One year'),
+    contractTwoYear: +(p.contract === 'Two year'),
+    internetFiber: +(p.internetService === 'Fiber optic'),
+    internetNone: +(p.internetService === 'No'),
+    payMailedCheck: +(p.paymentMethod === 'Mailed check'),
+    payBankTransfer: +(p.paymentMethod === 'Bank transfer (automatic)'),
+    payCreditCard: +(p.paymentMethod === 'Credit card (automatic)'),
+  };
+}
+
+/** Raw model probability in [0, 1]. */
+export function churnProbability(p: CustomerProfile): number {
+  const x = featureVector(p);
+  let z = M.intercept;
+  for (const [k, w] of Object.entries(M.coefficients)) z += w * x[k];
+  return sigmoid(z);
+}
+
+/**
+ * Features that are one categorical choice in the UI are shown as one factor.
+ * Everything else is its own factor.
+ */
+const GROUPS: Record<string, { label: string; category: RiskFactorContribution['category']; keys: string[] }> = {
+  contract: { label: 'Contract', category: 'Contract', keys: ['contractOneYear', 'contractTwoYear'] },
+  internet: { label: 'Internet service', category: 'Services', keys: ['internetFiber', 'internetNone'] },
+  payment: { label: 'Payment method', category: 'Billing', keys: ['payMailedCheck', 'payBankTransfer', 'payCreditCard'] },
+};
+const GROUPED_KEYS = new Set(Object.values(GROUPS).flatMap((g) => g.keys));
+
+function levelName(p: CustomerProfile, group: string): string {
+  if (group === 'contract') return p.contract;
+  if (group === 'internet') return p.internetService === 'No' ? 'No internet' : p.internetService;
+  return p.paymentMethod;
+}
+
+/**
+ * How much each factor moves this customer's predicted churn relative to a
+ * customer with the dataset-average value of that factor. Reported in
+ * percentage points of probability (a log-odds contribution is passed through
+ * the sigmoid around the customer's own score, so the pieces are interpretable
+ * and roughly, not exactly, additive).
+ *
+ * This is association, not causation: it describes what the model has learned
+ * from past customers.
+ */
+export function explain(p: CustomerProfile): RiskFactorContribution[] {
+  const x = featureVector(p);
+  const z = M.intercept + Object.entries(M.coefficients).reduce((s, [k, w]) => s + w * x[k], 0);
+  const pts = (c: number) => (sigmoid(z) - sigmoid(z - c)) * 100;
+  const out: RiskFactorContribution[] = [];
+
+  const push = (label: string, category: RiskFactorContribution['category'], c: number, note: string) => {
+    const impact = Math.round(pts(c) * 10) / 10;
+    if (Math.abs(impact) < 0.5) return;
+    out.push({
+      featureName: label,
+      category,
+      impactPercentage: impact,
+      direction: impact > 0 ? 'increases_risk' : 'reduces_risk',
+      description: `${impact > 0 ? 'Raises' : 'Lowers'} predicted churn by about ${Math.abs(impact).toFixed(1)} points ` +
+        `compared with a customer at the average for this factor. ${note}`,
     });
-  } else if (profile.contract === 'One year') {
-    const impact = -0.58;
-    logit += impact;
-    factors.push({
-      featureName: 'One-Year Contract Commitment',
-      category: 'Contract',
-      impactPercentage: -18,
-      direction: 'reduces_risk',
-      description: '12-month commitment substantially stabilizes retention window.',
-    });
-  } else if (profile.contract === 'Two year') {
-    const impact = -1.35;
-    logit += impact;
-    factors.push({
-      featureName: 'Two-Year Contract Commitment',
-      category: 'Contract',
-      impactPercentage: -36,
-      direction: 'reduces_risk',
-      description: 'High switching friction and multi-year contract yields lowest churn profile.',
-    });
+  };
+
+  for (const [key, g] of Object.entries(GROUPS)) {
+    const c = g.keys.reduce((s, k) => s + (M.coefficients as Record<string, number>)[k] * (x[k] - (M.means as Record<string, number>)[k]), 0);
+    push(`${g.label}: ${levelName(p, key)}`, g.category, c, 'Learned from past customers, not a proven cause.');
   }
-
-  // 2. Tenure (Months with company)
-  // Early tenure (0-6 months) is highest hazard zone; tenure > 24 months protects.
-  if (profile.tenure <= 6) {
-    const impact = 0.65 - (profile.tenure * 0.08);
-    logit += impact;
-    factors.push({
-      featureName: `Early Tenure (${profile.tenure} mo)`,
-      category: 'Tenure',
-      impactPercentage: Math.round(22 - profile.tenure * 2),
-      direction: 'increases_risk',
-      description: 'New subscribers have not yet formed product habits and explore market alternatives.',
-    });
-  } else if (profile.tenure > 24) {
-    const impact = -Math.min(1.2, (profile.tenure - 24) * 0.025 + 0.35);
-    logit += impact;
-    factors.push({
-      featureName: `Established Tenure (${profile.tenure} mo)`,
-      category: 'Tenure',
-      impactPercentage: -Math.round(15 + Math.min(20, (profile.tenure - 24) * 0.4)),
-      direction: 'reduces_risk',
-      description: 'Long customer relationship demonstrates strong product stickiness and brand loyalty.',
-    });
-  } else {
-    // 7 to 24 months
-    const impact = -0.15;
-    logit += impact;
+  for (const [k, w] of Object.entries(M.coefficients)) {
+    if (GROUPED_KEYS.has(k)) continue;
+    const feat = (M.features as Record<string, { label: string; category: RiskFactorContribution['category'] }>)[k];
+    const c = w * (x[k] - (M.means as Record<string, number>)[k]);
+    const value = k === 'tenure' ? `${p.tenure} months` : k === 'monthlyCharges' ? `$${p.monthlyCharges.toFixed(2)}/mo` : x[k] ? 'yes' : 'no';
+    push(`${feat.label.replace(/ \(.*\)/, '')}: ${value}`, feat.category, c, 'Learned from past customers, not a proven cause.');
   }
+  return out;
+}
 
-  // 3. Internet Service & Tech Support Interaction
-  if (profile.internetService === 'Fiber optic') {
-    if (!profile.techSupport) {
-      const impact = 0.58;
-      logit += impact;
-      factors.push({
-        featureName: 'Fiber Optic Without Tech Support',
-        category: 'Services',
-        impactPercentage: 19,
-        direction: 'increases_risk',
-        description: 'Fiber customers expect premium bandwidth reliability; lack of dedicated tech support triggers frustration.',
-      });
-    } else {
-      const impact = 0.15;
-      logit += impact;
-    }
-  } else if (profile.internetService === 'No') {
-    const impact = -0.65;
-    logit += impact;
-    factors.push({
-      featureName: 'Phone-Only (No Internet)',
-      category: 'Services',
-      impactPercentage: -21,
-      direction: 'reduces_risk',
-      description: 'Basic utility telephone customers exhibit remarkably low attrition rates.',
-    });
-  } else if (profile.internetService === 'DSL') {
-    const impact = -0.12;
-    logit += impact;
-  }
+export function calculateChurnPrediction(profile: CustomerProfile, threshold: number = 0.5): PredictionResult {
+  const z = M.intercept + Object.entries(M.coefficients).reduce((s, [k, w]) => s + w * featureVector(profile)[k], 0);
+  const probability = churnProbability(profile);
+  const percent = Math.round(probability * 1000) / 10; // e.g. 74.2
 
-  // 4. Tech Support & Online Security Addons
-  if (profile.techSupport) {
-    const impact = -0.42;
-    logit += impact;
-    factors.push({
-      featureName: 'Tech Support Service Active',
-      category: 'Services',
-      impactPercentage: -14,
-      direction: 'reduces_risk',
-      description: 'Direct troubleshooting access reduces unresolved technical complaints.',
-    });
-  }
-  if (profile.onlineSecurity) {
-    const impact = -0.38;
-    logit += impact;
-    factors.push({
-      featureName: 'Online Security Suite Active',
-      category: 'Services',
-      impactPercentage: -12,
-      direction: 'reduces_risk',
-      description: 'Security software integration deeply integrates customer devices with your ecosystem.',
-    });
-  }
-  if (profile.onlineBackup) {
-    const impact = -0.22;
-    logit += impact;
-    factors.push({
-      featureName: 'Cloud Backup Storage',
-      category: 'Services',
-      impactPercentage: -7,
-      direction: 'reduces_risk',
-      description: 'Data stored in cloud backups increases switching cost and customer lock-in.',
-    });
-  }
+  const riskLevel: RiskLevel =
+    percent >= RISK_BANDS.highFrom ? 'High' : percent >= RISK_BANDS.moderateFrom ? 'Moderate' : 'Low';
 
-  // 5. Payment Method & Paperless Billing
-  if (profile.paymentMethod === 'Electronic check') {
-    const impact = 0.46;
-    logit += impact;
-    factors.push({
-      featureName: 'Payment via Electronic Check',
-      category: 'Billing',
-      impactPercentage: 15,
-      direction: 'increases_risk',
-      description: 'Manual electronic checks cause billing friction, failed transactions, and active payment reassessment.',
-    });
-  } else if (
-    profile.paymentMethod === 'Credit card (automatic)' ||
-    profile.paymentMethod === 'Bank transfer (automatic)'
-  ) {
-    const impact = -0.36;
-    logit += impact;
-    factors.push({
-      featureName: 'Automated Payment (ACH/Card)',
-      category: 'Billing',
-      impactPercentage: -11,
-      direction: 'reduces_risk',
-      description: 'Passive auto-renewal eliminates monthly payment decision checkpoints.',
-    });
-  }
-
-  if (profile.paperlessBilling) {
-    logit += 0.18;
-  }
-
-  // 6. Pricing Scale (Monthly Charges)
-  if (profile.monthlyCharges > 85) {
-    const chargeDiff = profile.monthlyCharges - 85;
-    const impact = Math.min(0.55, chargeDiff * 0.012);
-    logit += impact;
-    factors.push({
-      featureName: `High Monthly Bill ($${profile.monthlyCharges.toFixed(2)}/mo)`,
-      category: 'Billing',
-      impactPercentage: Math.round(Math.min(18, chargeDiff * 0.4 + 6)),
-      direction: 'increases_risk',
-      description: 'Premium pricing tier creates sensitivity to competitor promotional offers.',
-    });
-  } else if (profile.monthlyCharges < 35) {
-    const impact = -0.32;
-    logit += impact;
-    factors.push({
-      featureName: `Low Monthly Bill ($${profile.monthlyCharges.toFixed(2)}/mo)`,
-      category: 'Billing',
-      impactPercentage: -10,
-      direction: 'reduces_risk',
-      description: 'Inexpensive basic pricing presents negligible budget incentive to cancel.',
-    });
-  }
-
-  // 7. Demographics
-  if (profile.seniorCitizen) {
-    logit += 0.22;
-    factors.push({
-      featureName: 'Senior Citizen Demographic',
-      category: 'Demographics',
-      impactPercentage: 7,
-      direction: 'increases_risk',
-      description: 'Senior demographic correlates with fixed-income budget optimization.',
-    });
-  }
-  if (profile.partner || profile.dependents) {
-    logit += -0.28;
-    factors.push({
-      featureName: 'Multi-User Household (Partner/Family)',
-      category: 'Demographics',
-      impactPercentage: -9,
-      direction: 'reduces_risk',
-      description: 'Household-shared connectivity makes service cancellation disruptive to entire family.',
-    });
-  }
-
-  // Sigmoid probability calculation
-  const probabilityRaw = 1 / (1 + Math.exp(-logit));
-  const churnProbability = Math.round(Math.min(0.99, Math.max(0.01, probabilityRaw)) * 1000) / 10; // e.g. 74.2%
-
-  let riskLevel: RiskLevel = 'Low';
-  if (churnProbability >= 65) {
-    riskLevel = 'High';
-  } else if (churnProbability >= 30) {
-    riskLevel = 'Moderate';
-  }
-
-  const willChurn = churnProbability >= threshold * 100;
-
-  // Revenue computations
-  const monthlyRevenueAtRisk = profile.monthlyCharges;
-  // Estimate remaining CLV based on tenure hazard model:
-  // Customers with low churn survive ~36+ more months; high churn survive ~4-8 months
-  const expectedSurvivalMonths = Math.max(
-    3,
-    Math.round(48 * (1 - churnProbability / 100) + 4)
-  );
-  const estimatedClv = Math.round(monthlyRevenueAtRisk * expectedSurvivalMonths);
-  const annualRevenueAtRisk = Math.round(monthlyRevenueAtRisk * 12);
-
-  // Split and sort factors
+  const factors = explain(profile);
   const topRiskDrivers = factors
     .filter((f) => f.direction === 'increases_risk')
     .sort((a, b) => b.impactPercentage - a.impactPercentage)
     .slice(0, 5);
-
   const topProtectiveFactors = factors
     .filter((f) => f.direction === 'reduces_risk')
-    .sort((a, b) => a.impactPercentage - b.impactPercentage) // most negative first
+    .sort((a, b) => a.impactPercentage - b.impactPercentage)
     .slice(0, 5);
 
-  // Formulate primary retention recommendation
-  let retentionRecommendation = 'Customer shows strong loyalty signals. Maintain quarterly satisfaction check-in.';
+  // Billing exposed over a year, and the probability-weighted share of it.
+  // Deliberately not a lifetime-value estimate: the data has no revenue history.
+  const monthlyRevenueAtRisk = profile.monthlyCharges;
+  const annualRevenueAtRisk = Math.round(monthlyRevenueAtRisk * 12);
+  const expectedAnnualLoss = Math.round(annualRevenueAtRisk * probability);
+
+  // Playbook suggestions are plain rules keyed off the profile, not model output.
+  let retentionRecommendation = 'Low predicted risk. Keep the regular check-in cadence.';
   if (riskLevel === 'High') {
     if (profile.contract === 'Month-to-month' && !profile.techSupport) {
       retentionRecommendation =
-        'Immediate High Risk: Propose 1-Year Contract upgrade with 3 months free Tech Support and $10/mo rate guarantee.';
+        'High risk: offer a 1-year contract upgrade with tech support included, and confirm the price is competitive.';
     } else if (profile.paymentMethod === 'Electronic check') {
       retentionRecommendation =
-        'Critical Intervention: Offer a one-time $25 billing credit for switching to Automatic Credit Card billing, paired with a contract term discount.';
+        'High risk: offer a small credit for moving to automatic payment, paired with a contract-term discount.';
     } else {
       retentionRecommendation =
-        'High Churn Threat: Dispatch VIP customer success outreach; conduct plan audit and bundle loyalty pricing reduction.';
+        'High risk: proactive outreach from customer success, with a plan review and loyalty pricing.';
     }
   } else if (riskLevel === 'Moderate') {
     if (profile.contract === 'Month-to-month') {
-      retentionRecommendation =
-        'Moderate Vulnerability: Offer 10% discount incentive to convert to an annual plan.';
+      retentionRecommendation = 'Moderate risk: offer an annual-plan discount.';
     } else if (!profile.onlineSecurity && profile.internetService !== 'No') {
-      retentionRecommendation =
-        'Opportunity to strengthen retention: Bundle complimentary Online Security and Cloud Backup to deepen product usage.';
+      retentionRecommendation = 'Moderate risk: bundle online security and backup to deepen usage.';
     } else {
-      retentionRecommendation =
-        'Monitor usage: Send proactive customer satisfaction survey and ensure recent support tickets were fully resolved.';
+      retentionRecommendation = 'Moderate risk: send a satisfaction survey and check recent support tickets were resolved.';
     }
   }
 
   return {
-    churnProbability,
+    churnProbability: percent,
     riskLevel,
-    willChurn,
+    willChurn: probability >= threshold,
     threshold,
-    logit: Math.round(logit * 100) / 100,
-    estimatedClv,
+    logit: Math.round(z * 100) / 100,
+    expectedAnnualLoss,
     monthlyRevenueAtRisk,
     annualRevenueAtRisk,
     topRiskDrivers,
@@ -293,55 +184,122 @@ export function calculateChurnPrediction(
 }
 
 /**
- * What-If Simulation: modifies a baseline profile and calculates new prediction & delta.
+ * What-if: re-score a modified profile and report the change.
+ *
+ * This is the model's counterfactual, not a causal estimate. The data is
+ * observational, so "adding tech support" here means "a customer who looks like
+ * this one but has tech support", which need not match what an offer would do.
  */
 export function simulateWhatIf(
   baselineProfile: CustomerProfile,
-  adjustments: WhatIfAdjustments
+  adjustments: WhatIfAdjustments,
 ): {
   baselineResult: PredictionResult;
   simulatedResult: PredictionResult;
-  probabilityDelta: number; // e.g. -28.4%
+  probabilityDelta: number;
   annualRevenueSaved: number;
   newRiskLevel: RiskLevel;
 } {
   const baselineResult = calculateChurnPrediction(baselineProfile);
 
-  const modifiedProfile: CustomerProfile = {
+  const modified: CustomerProfile = {
     ...baselineProfile,
     contract: adjustments.contract ?? baselineProfile.contract,
     tenure: baselineProfile.tenure + (adjustments.tenureBonus ?? 0),
     monthlyCharges: Math.max(18, baselineProfile.monthlyCharges - (adjustments.monthlyDiscount ?? 0)),
-    techSupport: adjustments.addTechSupport !== undefined ? adjustments.addTechSupport : baselineProfile.techSupport,
-    onlineSecurity: adjustments.addOnlineSecurity !== undefined ? adjustments.addOnlineSecurity : baselineProfile.onlineSecurity,
+    techSupport: adjustments.addTechSupport ?? baselineProfile.techSupport,
+    onlineSecurity: adjustments.addOnlineSecurity ?? baselineProfile.onlineSecurity,
     paymentMethod: adjustments.switchPaymentMethod ?? baselineProfile.paymentMethod,
   };
 
-  const simulatedResult = calculateChurnPrediction(modifiedProfile);
+  const simulatedResult = calculateChurnPrediction(modified);
   const probabilityDelta = Math.round((simulatedResult.churnProbability - baselineResult.churnProbability) * 10) / 10;
-  
-  // Revenue saved if risk decreased:
-  // e.g. (baselineProb - newProb)% * annual bill
-  const riskReductionFactor = Math.max(0, (baselineResult.churnProbability - simulatedResult.churnProbability) / 100);
-  const annualRevenueSaved = Math.round(baselineResult.annualRevenueAtRisk * riskReductionFactor);
 
+  // Expected annual billing kept if the change lowers the predicted risk.
+  const reduction = Math.max(0, (baselineResult.churnProbability - simulatedResult.churnProbability) / 100);
+  const annualRevenueSaved = Math.round(baselineResult.annualRevenueAtRisk * reduction);
+
+  return { baselineResult, simulatedResult, probabilityDelta, annualRevenueSaved, newRiskLevel: simulatedResult.riskLevel };
+}
+
+export interface Lever {
+  title: string;
+  adjustments: WhatIfAdjustments;
+  /** Change in predicted churn probability, in points (negative is better). */
+  delta: number;
+  /** Illustrative cost, an assumption and not something the data can tell us. */
+  cost: string;
+}
+
+/**
+ * The standard retention levers that apply to this customer, each scored by the
+ * model, best first. Only levers the model predicts will lower risk are kept.
+ */
+export function standardLevers(profile: CustomerProfile): Lever[] {
+  const candidates: Array<Omit<Lever, 'delta'> & { applies: boolean }> = [
+    { title: '1-year contract offer', adjustments: { contract: 'One year' }, cost: 'e.g. $10/mo credit for 6 months', applies: profile.contract === 'Month-to-month' },
+    { title: '2-year contract offer', adjustments: { contract: 'Two year' }, cost: 'e.g. $15/mo credit for 6 months', applies: profile.contract !== 'Two year' },
+    { title: 'Include tech support', adjustments: { addTechSupport: true }, cost: 'e.g. cost of providing the service', applies: !profile.techSupport && profile.internetService !== 'No' },
+    { title: 'Include online security', adjustments: { addOnlineSecurity: true }, cost: 'e.g. cost of providing the service', applies: !profile.onlineSecurity && profile.internetService !== 'No' },
+    { title: 'Move to automatic payment', adjustments: { switchPaymentMethod: 'Credit card (automatic)' }, cost: 'e.g. one-time $20 credit', applies: profile.paymentMethod === 'Electronic check' || profile.paymentMethod === 'Mailed check' },
+  ];
+  return candidates
+    .filter((c) => c.applies)
+    .map(({ applies, ...c }) => ({ ...c, delta: simulateWhatIf(profile, c.adjustments).probabilityDelta }))
+    .filter((l) => l.delta < 0)
+    .sort((a, b) => a.delta - b.delta);
+}
+
+/**
+ * Retention plan built without an LLM. The impact figures are the model's own
+ * what-if results for this customer, never invented; costs are labelled examples.
+ */
+export function buildFallbackStrategy(profile: CustomerProfile, prediction: PredictionResult): RetentionStrategyResponse {
+  const levers = standardLevers(profile).slice(0, 3);
+  const first = profile.name.split(' ')[0];
+  const topDriver = prediction.topRiskDrivers[0]?.featureName;
+  const call = prediction.churnProbability >= 50;
   return {
-    baselineResult,
-    simulatedResult,
-    probabilityDelta,
-    annualRevenueSaved,
-    newRiskLevel: simulatedResult.riskLevel,
+    customerName: profile.name,
+    riskSummary:
+      `${profile.name} has a predicted ${prediction.churnProbability}% chance of leaving` +
+      (topDriver ? `, driven mainly by: ${topDriver}.` : '.'),
+    recommendedIncentives: levers.length
+      ? levers.map((l) => ({
+          title: l.title,
+          impactEstimate: `${l.delta.toFixed(1)} points predicted churn (model what-if)`,
+          costToBusiness: l.cost,
+          roiVerdict: `Expected annual billing retained: $${Math.round(prediction.annualRevenueAtRisk * (-l.delta / 100))} (association, not a guarantee).`,
+        }))
+      : [{
+          title: 'No model-backed lever found',
+          impactEstimate: 'The model predicts none of the standard offers would lower this risk',
+          costToBusiness: 'n/a',
+          roiVerdict: 'Consider a personal check-in instead.',
+        }],
+    actionScript: {
+      channel: call ? 'Phone Call' : 'Email',
+      subjectOrOpener: call
+        ? `Hi ${first}, this is your account specialist checking in on how your service is going.`
+        : `A note on your plan, ${first}`,
+      messageBody:
+        `Dear ${profile.name},\n\nThank you for being with us for ${profile.tenure} months. ` +
+        `We would like to make sure your ${profile.contract.toLowerCase()} ${profile.internetService === 'No' ? 'phone' : profile.internetService} plan is still the right fit, ` +
+        `and we have a few options that could help. Would you like us to walk through them?`,
+    },
+    timingRecommendation: 'Reach out before the next billing cycle.',
+    aiGenerated: false,
   };
 }
 
 /**
- * Pre-configured customer archetypes for instant testing
+ * Synthetic example customers for instant testing. Names and IDs are made up;
+ * every risk figure shown for them is computed by the model, not written here.
  */
-export const CUSTOMER_PRESETS: Array<{ id: string; label: string; badge: string; profile: CustomerProfile }> = [
+const PRESET_DEFS: Array<{ id: string; label: string; profile: CustomerProfile }> = [
   {
     id: 'preset_high_risk',
     label: 'At-Risk New Fiber User',
-    badge: 'High Risk (80%+)',
     profile: {
       id: 'CUST-8921',
       name: 'Elena Rostova',
@@ -368,7 +326,6 @@ export const CUSTOMER_PRESETS: Array<{ id: string; label: string; badge: string;
   {
     id: 'preset_mod_risk',
     label: 'Mid-Tenure DSL Streamer',
-    badge: 'Moderate Risk (~45%)',
     profile: {
       id: 'CUST-4109',
       name: 'Marcus Chen',
@@ -395,7 +352,6 @@ export const CUSTOMER_PRESETS: Array<{ id: string; label: string; badge: string;
   {
     id: 'preset_loyal_family',
     label: 'Long-term Family Plan',
-    badge: 'Low Risk (~8%)',
     profile: {
       id: 'CUST-1044',
       name: 'Sarah & David Miller',
@@ -422,7 +378,6 @@ export const CUSTOMER_PRESETS: Array<{ id: string; label: string; badge: string;
   {
     id: 'preset_senior_saver',
     label: 'Senior Budget Landline',
-    badge: 'Low Risk (~14%)',
     profile: {
       id: 'CUST-3382',
       name: 'Arthur Pendelton',
@@ -449,10 +404,10 @@ export const CUSTOMER_PRESETS: Array<{ id: string; label: string; badge: string;
 ];
 
 /**
- * Pre-loaded cohort for batch analysis
+ * Pre-loaded example cohort for the portfolio view (synthetic customers).
  */
 export const SAMPLE_PORTFOLIO: CustomerProfile[] = [
-  ...CUSTOMER_PRESETS.map((p) => p.profile),
+  ...PRESET_DEFS.map((p) => p.profile),
   {
     id: 'CUST-5512',
     name: 'Samantha Vance',
@@ -581,33 +536,33 @@ export const SAMPLE_PORTFOLIO: CustomerProfile[] = [
   },
 ];
 
-/**
- * Model Diagnostics information
- */
+export const CUSTOMER_PRESETS = PRESET_DEFS.map((p) => {
+  const pct = Math.round(churnProbability(p.profile) * 100);
+  const band = pct >= RISK_BANDS.highFrom ? 'High' : pct >= RISK_BANDS.moderateFrom ? 'Moderate' : 'Low';
+  return { ...p, badge: `${band} risk (${pct}%)` };
+});
+
+/** Metrics measured on the held-out test set, at the given decision threshold. */
+export function metricsAt(threshold: number) {
+  const row = M.byThreshold.reduce((best, r) =>
+    Math.abs(r.threshold - threshold) < Math.abs(best.threshold - threshold) ? r : best);
+  return { ...row, total: row.tn + row.fp + row.fn + row.tp };
+}
+
+/** Everything the diagnostics page shows about the model, all from `model.json`. */
 export const MODEL_METRICS = {
-  modelName: 'Ensemble Gradient Boosted Trees + Calibrated Logistic Classifier',
-  version: '2.4.1-prod',
-  dataset: 'Telco Customer Churn (7,043 historical records)',
-  evaluationDate: 'Validation Set (1,409 hold-out customers)',
-  accuracy: '86.4%',
-  precision: '83.2%',
-  recall: '81.8%',
-  f1Score: '82.5%',
-  aucRoc: '0.894',
-  confusionMatrix: {
-    trueNegative: 928,
-    falsePositive: 104,
-    falseNegative: 88,
-    truePositive: 289,
-    total: 1409,
-  },
-  globalFeatureImportance: [
-    { feature: 'Contract (Month-to-Month vs 1-2 Year)', weight: 0.29, rank: 1 },
-    { feature: 'Tenure Length (Early Hazard Curve)', weight: 0.22, rank: 2 },
-    { feature: 'Internet Service (Fiber Optic)', weight: 0.16, rank: 3 },
-    { feature: 'Tech Support & Online Security Subscription', weight: 0.13, rank: 4 },
-    { feature: 'Payment Method (Electronic Check friction)', weight: 0.09, rank: 5 },
-    { feature: 'Monthly Charges ($ tier)', weight: 0.06, rank: 6 },
-    { feature: 'Household Demographics (Partner/Dependents)', weight: 0.05, rank: 7 },
-  ],
+  algorithm: M.algorithm,
+  dataset: `${M.trainedOn} (${(M.nTrain + M.nTest).toLocaleString()} customers)`,
+  split: `${M.nTrain.toLocaleString()} train / ${M.nTest.toLocaleString()} held-out test`,
+  trainedDate: M.trainedDate,
+  baseRate: M.baseRate,
+  bestF1Threshold: M.bestF1Threshold,
+  thresholds: M.byThreshold.map((r) => r.threshold),
+  rocAuc: M.metrics.rocAuc,
+  rocAucCi95: M.metrics.rocAucCi95,
+  prAuc: M.metrics.prAuc,
+  brier: M.metrics.brier,
+  brierNoSkill: M.metrics.brierNoSkill,
+  testChurnRate: M.metrics.testChurnRate,
+  globalFeatureImportance: M.globalImportance,
 };

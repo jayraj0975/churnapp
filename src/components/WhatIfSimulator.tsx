@@ -142,7 +142,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
             </span>
           </div>
           <div className="mt-4 pt-3 border-t border-emerald-200 text-xs text-emerald-700 font-medium">
-            Projected CLV: ${simulation.simulatedResult.estimatedClv}
+            Expected annual loss: ${simulation.simulatedResult.expectedAnnualLoss}
           </div>
         </div>
       </div>

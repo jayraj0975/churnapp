@@ -45,9 +45,9 @@ export interface PredictionResult {
   willChurn: boolean; // based on threshold (default 0.50)
   threshold: number;
   logit: number;
-  estimatedClv: number; // Customer Lifetime Value $
+  expectedAnnualLoss: number; // annual billing x churn probability, $
   monthlyRevenueAtRisk: number;
-  annualRevenueAtRisk: number;
+  annualRevenueAtRisk: number; // 12 months of billing, $
   topRiskDrivers: RiskFactorContribution[];
   topProtectiveFactors: RiskFactorContribution[];
   retentionRecommendation: string;

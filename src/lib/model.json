@@ -1,0 +1,555 @@
+{
+  "algorithm": "Logistic regression (L2, unweighted)",
+  "trainedOn": "IBM Telco Customer Churn",
+  "trainedDate": "2026-09-20",
+  "sklearn": "1.9.1",
+  "seed": 42,
+  "nTrain": 5625,
+  "nTest": 1407,
+  "baseRate": 0.26578498293515357,
+  "intercept": 0.28436071285206377,
+  "coefficients": {
+    "tenure": -0.032977946863321644,
+    "monthlyCharges": -0.005458794943472678,
+    "seniorCitizen": 0.19486820650562472,
+    "partner": -0.029169391459754914,
+    "dependents": -0.24204948666925633,
+    "phoneService": -0.4031106171833308,
+    "multipleLines": 0.3661289104343081,
+    "onlineSecurity": -0.3733538137985904,
+    "onlineBackup": -0.11859858381681172,
+    "deviceProtection": 0.0758423207164359,
+    "techSupport": -0.33173408677337557,
+    "streamingTV": 0.3556860023549066,
+    "streamingMovies": 0.32880588775908054,
+    "paperlessBilling": 0.29275372559243357,
+    "contractOneYear": -0.7441754630411589,
+    "contractTwoYear": -1.3399085050653994,
+    "internetFiber": 1.0379700456059187,
+    "internetNone": -0.943904966579909,
+    "payMailedCheck": -0.2666419993480737,
+    "payBankTransfer": -0.38673870239583735,
+    "payCreditCard": -0.3420058728583642
+  },
+  "means": {
+    "tenure": 32.562311111111114,
+    "monthlyCharges": 64.99931555555555,
+    "seniorCitizen": 0.16177777777777777,
+    "partner": 0.48604444444444445,
+    "dependents": 0.2995555555555556,
+    "phoneService": 0.9031111111111111,
+    "multipleLines": 0.424,
+    "onlineSecurity": 0.2869333333333333,
+    "onlineBackup": 0.3504,
+    "deviceProtection": 0.3456,
+    "techSupport": 0.29475555555555555,
+    "streamingTV": 0.38897777777777776,
+    "streamingMovies": 0.39022222222222225,
+    "paperlessBilling": 0.5953777777777778,
+    "contractOneYear": 0.21013333333333334,
+    "contractTwoYear": 0.24142222222222223,
+    "internetFiber": 0.4414222222222222,
+    "internetNone": 0.21475555555555556,
+    "payMailedCheck": 0.22542222222222222,
+    "payBankTransfer": 0.21955555555555556,
+    "payCreditCard": 0.216
+  },
+  "features": {
+    "tenure": {
+      "label": "Tenure (months)",
+      "category": "Tenure"
+    },
+    "monthlyCharges": {
+      "label": "Monthly bill",
+      "category": "Billing"
+    },
+    "seniorCitizen": {
+      "label": "Senior citizen",
+      "category": "Demographics"
+    },
+    "partner": {
+      "label": "Has a partner",
+      "category": "Demographics"
+    },
+    "dependents": {
+      "label": "Has dependents",
+      "category": "Demographics"
+    },
+    "phoneService": {
+      "label": "Phone service",
+      "category": "Services"
+    },
+    "multipleLines": {
+      "label": "Multiple phone lines",
+      "category": "Services"
+    },
+    "onlineSecurity": {
+      "label": "Online security",
+      "category": "Services"
+    },
+    "onlineBackup": {
+      "label": "Online backup",
+      "category": "Services"
+    },
+    "deviceProtection": {
+      "label": "Device protection",
+      "category": "Services"
+    },
+    "techSupport": {
+      "label": "Tech support",
+      "category": "Services"
+    },
+    "streamingTV": {
+      "label": "Streaming TV",
+      "category": "Services"
+    },
+    "streamingMovies": {
+      "label": "Streaming movies",
+      "category": "Services"
+    },
+    "paperlessBilling": {
+      "label": "Paperless billing",
+      "category": "Billing"
+    },
+    "contractOneYear": {
+      "label": "One-year contract",
+      "category": "Contract"
+    },
+    "contractTwoYear": {
+      "label": "Two-year contract",
+      "category": "Contract"
+    },
+    "internetFiber": {
+      "label": "Fibre-optic internet",
+      "category": "Services"
+    },
+    "internetNone": {
+      "label": "No internet service",
+      "category": "Services"
+    },
+    "payMailedCheck": {
+      "label": "Pays by mailed check",
+      "category": "Billing"
+    },
+    "payBankTransfer": {
+      "label": "Pays by bank transfer",
+      "category": "Billing"
+    },
+    "payCreditCard": {
+      "label": "Pays by credit card",
+      "category": "Billing"
+    }
+  },
+  "metrics": {
+    "rocAuc": 0.8336836274596082,
+    "rocAucCi95": [
+      0.8108419641125106,
+      0.8555450469607762
+    ],
+    "prAuc": 0.6195919414997335,
+    "brier": 0.1406925613258027,
+    "brierNoSkill": 0.19515681950038172,
+    "testChurnRate": 0.2658137882018479
+  },
+  "calibration": [
+    {
+      "predicted": 0.015540705061562873,
+      "observed": 0.014184397163120567,
+      "n": 282
+    },
+    {
+      "predicted": 0.06838806634835855,
+      "observed": 0.0851063829787234,
+      "n": 282
+    },
+    {
+      "predicted": 0.1998092283245022,
+      "observed": 0.2206405693950178,
+      "n": 281
+    },
+    {
+      "predicted": 0.4116911702156383,
+      "observed": 0.35587188612099646,
+      "n": 281
+    },
+    {
+      "predicted": 0.6675622764405105,
+      "observed": 0.6548042704626335,
+      "n": 281
+    }
+  ],
+  "byThreshold": [
+    {
+      "threshold": 0.2,
+      "tn": 661,
+      "fp": 372,
+      "fn": 57,
+      "tp": 317,
+      "accuracy": 0.6950959488272921,
+      "precision": 0.46008708272859217,
+      "recall": 0.8475935828877005,
+      "f1": 0.5964252116650988
+    },
+    {
+      "threshold": 0.25,
+      "tn": 724,
+      "fp": 309,
+      "fn": 76,
+      "tp": 298,
+      "accuracy": 0.7263681592039801,
+      "precision": 0.49093904448105435,
+      "recall": 0.7967914438502673,
+      "f1": 0.6075433231396534
+    },
+    {
+      "threshold": 0.3,
+      "tn": 771,
+      "fp": 262,
+      "fn": 95,
+      "tp": 279,
+      "accuracy": 0.746268656716418,
+      "precision": 0.5157116451016636,
+      "recall": 0.7459893048128342,
+      "f1": 0.6098360655737705
+    },
+    {
+      "threshold": 0.35,
+      "tn": 820,
+      "fp": 213,
+      "fn": 108,
+      "tp": 266,
+      "accuracy": 0.7718550106609808,
+      "precision": 0.5553235908141962,
+      "recall": 0.7112299465240641,
+      "f1": 0.6236811254396248
+    },
+    {
+      "threshold": 0.4,
+      "tn": 849,
+      "fp": 184,
+      "fn": 123,
+      "tp": 251,
+      "accuracy": 0.7818052594171997,
+      "precision": 0.5770114942528736,
+      "recall": 0.6711229946524064,
+      "f1": 0.6205191594561187
+    },
+    {
+      "threshold": 0.45,
+      "tn": 881,
+      "fp": 152,
+      "fn": 141,
+      "tp": 233,
+      "accuracy": 0.7917555081734187,
+      "precision": 0.6051948051948052,
+      "recall": 0.6229946524064172,
+      "f1": 0.613965744400527
+    },
+    {
+      "threshold": 0.5,
+      "tn": 914,
+      "fp": 119,
+      "fn": 159,
+      "tp": 215,
+      "accuracy": 0.8024164889836531,
+      "precision": 0.6437125748502994,
+      "recall": 0.5748663101604278,
+      "f1": 0.6073446327683616
+    },
+    {
+      "threshold": 0.55,
+      "tn": 942,
+      "fp": 91,
+      "fn": 197,
+      "tp": 177,
+      "accuracy": 0.7953091684434968,
+      "precision": 0.6604477611940298,
+      "recall": 0.4732620320855615,
+      "f1": 0.5514018691588785
+    },
+    {
+      "threshold": 0.6,
+      "tn": 959,
+      "fp": 74,
+      "fn": 227,
+      "tp": 147,
+      "accuracy": 0.7860696517412935,
+      "precision": 0.665158371040724,
+      "recall": 0.393048128342246,
+      "f1": 0.49411764705882355
+    },
+    {
+      "threshold": 0.65,
+      "tn": 983,
+      "fp": 50,
+      "fn": 268,
+      "tp": 106,
+      "accuracy": 0.7739872068230277,
+      "precision": 0.6794871794871795,
+      "recall": 0.28342245989304815,
+      "f1": 0.4
+    },
+    {
+      "threshold": 0.7,
+      "tn": 1007,
+      "fp": 26,
+      "fn": 312,
+      "tp": 62,
+      "accuracy": 0.759772565742715,
+      "precision": 0.7045454545454546,
+      "recall": 0.1657754010695187,
+      "f1": 0.2683982683982684
+    },
+    {
+      "threshold": 0.75,
+      "tn": 1023,
+      "fp": 10,
+      "fn": 339,
+      "tp": 35,
+      "accuracy": 0.751954513148543,
+      "precision": 0.7777777777777778,
+      "recall": 0.09358288770053476,
+      "f1": 0.16706443914081145
+    },
+    {
+      "threshold": 0.8,
+      "tn": 1031,
+      "fp": 2,
+      "fn": 362,
+      "tp": 12,
+      "accuracy": 0.7412935323383084,
+      "precision": 0.8571428571428571,
+      "recall": 0.03208556149732621,
+      "f1": 0.061855670103092786
+    }
+  ],
+  "bestF1Threshold": 0.35,
+  "globalImportance": [
+    {
+      "feature": "Tenure (months)",
+      "weight": 0.177742249871602
+    },
+    {
+      "feature": "Two-year contract",
+      "weight": 0.12593663453928197
+    },
+    {
+      "feature": "Fibre-optic internet",
+      "weight": 0.11319884711051174
+    },
+    {
+      "feature": "No internet service",
+      "weight": 0.08513167356491971
+    },
+    {
+      "feature": "One-year contract",
+      "weight": 0.06658677394478901
+    },
+    {
+      "feature": "Multiple phone lines",
+      "weight": 0.03973895596952746
+    },
+    {
+      "feature": "Streaming TV",
+      "weight": 0.03808429603075371
+    },
+    {
+      "feature": "Online security",
+      "weight": 0.037090648035149096
+    }
+  ],
+  "golden": [
+    {
+      "profile": {
+        "id": "0604-THJFP",
+        "name": "0604-THJFP",
+        "tenure": 59,
+        "monthlyCharges": 75.95,
+        "contract": "Two year",
+        "internetService": "DSL",
+        "onlineSecurity": false,
+        "onlineBackup": true,
+        "deviceProtection": false,
+        "techSupport": true,
+        "streamingTV": true,
+        "streamingMovies": true,
+        "paperlessBilling": true,
+        "paymentMethod": "Credit card (automatic)",
+        "seniorCitizen": false,
+        "partner": true,
+        "dependents": true,
+        "phoneService": true,
+        "multipleLines": false
+      },
+      "probability": 0.019738186035103217
+    },
+    {
+      "profile": {
+        "id": "4059-IIEBK",
+        "name": "4059-IIEBK",
+        "tenure": 7,
+        "monthlyCharges": 78.55,
+        "contract": "Month-to-month",
+        "internetService": "Fiber optic",
+        "onlineSecurity": false,
+        "onlineBackup": true,
+        "deviceProtection": false,
+        "techSupport": false,
+        "streamingTV": false,
+        "streamingMovies": false,
+        "paperlessBilling": true,
+        "paymentMethod": "Bank transfer (automatic)",
+        "seniorCitizen": false,
+        "partner": false,
+        "dependents": false,
+        "phoneService": true,
+        "multipleLines": true
+      },
+      "probability": 0.6018385204203486
+    },
+    {
+      "profile": {
+        "id": "2228-BZDEE",
+        "name": "2228-BZDEE",
+        "tenure": 54,
+        "monthlyCharges": 20.1,
+        "contract": "Two year",
+        "internetService": "No",
+        "onlineSecurity": false,
+        "onlineBackup": false,
+        "deviceProtection": false,
+        "techSupport": false,
+        "streamingTV": false,
+        "streamingMovies": false,
+        "paperlessBilling": false,
+        "paymentMethod": "Mailed check",
+        "seniorCitizen": false,
+        "partner": false,
+        "dependents": false,
+        "phoneService": true,
+        "multipleLines": false
+      },
+      "probability": 0.010356440052814584
+    },
+    {
+      "profile": {
+        "id": "2839-RFSQE",
+        "name": "2839-RFSQE",
+        "tenure": 2,
+        "monthlyCharges": 20.65,
+        "contract": "Month-to-month",
+        "internetService": "No",
+        "onlineSecurity": false,
+        "onlineBackup": false,
+        "deviceProtection": false,
+        "techSupport": false,
+        "streamingTV": false,
+        "streamingMovies": false,
+        "paperlessBilling": false,
+        "paymentMethod": "Mailed check",
+        "seniorCitizen": false,
+        "partner": false,
+        "dependents": false,
+        "phoneService": true,
+        "multipleLines": false
+      },
+      "probability": 0.18123881305168948
+    },
+    {
+      "profile": {
+        "id": "5360-LJCNJ",
+        "name": "5360-LJCNJ",
+        "tenure": 71,
+        "monthlyCharges": 105.15,
+        "contract": "Two year",
+        "internetService": "Fiber optic",
+        "onlineSecurity": false,
+        "onlineBackup": true,
+        "deviceProtection": true,
+        "techSupport": false,
+        "streamingTV": true,
+        "streamingMovies": true,
+        "paperlessBilling": true,
+        "paymentMethod": "Bank transfer (automatic)",
+        "seniorCitizen": false,
+        "partner": true,
+        "dependents": false,
+        "phoneService": true,
+        "multipleLines": true
+      },
+      "probability": 0.07933588610988956
+    },
+    {
+      "profile": {
+        "id": "7752-XUSCI",
+        "name": "7752-XUSCI",
+        "tenure": 60,
+        "monthlyCharges": 105.9,
+        "contract": "Month-to-month",
+        "internetService": "Fiber optic",
+        "onlineSecurity": false,
+        "onlineBackup": true,
+        "deviceProtection": true,
+        "techSupport": false,
+        "streamingTV": true,
+        "streamingMovies": true,
+        "paperlessBilling": true,
+        "paymentMethod": "Electronic check",
+        "seniorCitizen": false,
+        "partner": false,
+        "dependents": false,
+        "phoneService": true,
+        "multipleLines": true
+      },
+      "probability": 0.41655667471812763
+    },
+    {
+      "profile": {
+        "id": "8277-RVRSV",
+        "name": "8277-RVRSV",
+        "tenure": 33,
+        "monthlyCharges": 24.15,
+        "contract": "One year",
+        "internetService": "No",
+        "onlineSecurity": false,
+        "onlineBackup": false,
+        "deviceProtection": false,
+        "techSupport": false,
+        "streamingTV": false,
+        "streamingMovies": false,
+        "paperlessBilling": false,
+        "paymentMethod": "Credit card (automatic)",
+        "seniorCitizen": false,
+        "partner": true,
+        "dependents": true,
+        "phoneService": true,
+        "multipleLines": true
+      },
+      "probability": 0.03647299756062355
+    },
+    {
+      "profile": {
+        "id": "3530-CRZSB",
+        "name": "3530-CRZSB",
+        "tenure": 7,
+        "monthlyCharges": 20.65,
+        "contract": "Month-to-month",
+        "internetService": "No",
+        "onlineSecurity": false,
+        "onlineBackup": false,
+        "deviceProtection": false,
+        "techSupport": false,
+        "streamingTV": false,
+        "streamingMovies": false,
+        "paperlessBilling": false,
+        "paymentMethod": "Mailed check",
+        "seniorCitizen": false,
+        "partner": false,
+        "dependents": false,
+        "phoneService": true,
+        "multipleLines": false
+      },
+      "probability": 0.15804235892788476
+    }
+  ]
+}

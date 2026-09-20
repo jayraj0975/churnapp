@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "churn-predictor",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +9,10 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "train-model": "python3 scripts/train_model.py",
+    "check": "npm run lint && npm test"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

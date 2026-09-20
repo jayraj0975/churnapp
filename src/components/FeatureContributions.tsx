@@ -17,7 +17,7 @@ export const FeatureContributions: React.FC<FeatureContributionsProps> = ({
         <div>
           <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-indigo-600" />
-            Explainable AI: Feature Contributions (SHAP Attribution)
+            Feature Contributions
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Identifies specific subscriber attributes elevating or reducing churn likelihood.
