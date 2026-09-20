@@ -32,6 +32,15 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
 
   const simulation = simulateWhatIf(profile, adjustments);
 
+  // Each lever's effect for THIS customer, computed by the model on its own (not summed from the levers above).
+  const soloDelta = (adj: WhatIfAdjustments) => simulateWhatIf(profile, adj).probabilityDelta;
+  const describe = (delta: number, alreadyApplies: boolean) =>
+    alreadyApplies
+      ? 'Already applies to this customer'
+      : `Model estimate for this customer: ${delta > 0 ? '+' : delta < 0 ? '\u2212' : ''}${Math.abs(delta).toFixed(1)} pts churn risk (association, not proven cause)`;
+  const isAutoPay = profile.paymentMethod === 'Credit card (automatic)' || profile.paymentMethod === 'Bank transfer (automatic)';
+  const twoYearDelta = soloDelta({ contract: 'Two year' });
+
   const handleApply = () => {
     onApplyToProfile({
       ...profile,
@@ -160,7 +169,9 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
               <span className="text-xs font-semibold text-slate-800">
                 1. Contract Term Commitment
               </span>
-              <span className="text-[11px] text-indigo-600 font-bold">High Leverage</span>
+              <span className="text-[11px] text-indigo-600 font-bold">
+                {profile.contract === 'Two year' ? 'Already two-year' : `Two-year: ${twoYearDelta > 0 ? '+' : '\u2212'}${Math.abs(twoYearDelta).toFixed(1)} pts`}
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               {(['Month-to-month', 'One year', 'Two year'] as ContractType[]).map((t) => (
@@ -215,7 +226,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                 3. Complimentary 24/7 Tech Support
               </span>
               <span className="text-[11px] text-slate-500">
-                Removes technical frustration friction (-14% risk)
+                {describe(soloDelta({ addTechSupport: true }), profile.techSupport)}
               </span>
             </div>
             <input
@@ -233,7 +244,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                 4. Free Online Security & Anti-Malware
               </span>
               <span className="text-[11px] text-slate-500">
-                Deepens daily digital dependency (-12% risk)
+                {describe(soloDelta({ addOnlineSecurity: true }), profile.onlineSecurity)}
               </span>
             </div>
             <input
@@ -251,7 +262,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                 5. Auto-Pay Billing Transition (ACH / Recurring Credit Card)
               </span>
               <span className="text-[11px] text-slate-500">
-                Replaces manual Electronic/Mailed check with frictionless recurring charge (-11% risk)
+                {describe(soloDelta({ switchPaymentMethod: 'Credit card (automatic)' }), isAutoPay)}
               </span>
             </div>
             <input
