@@ -8,7 +8,7 @@ and Express, and installable as a PWA.
 
 The model behind it is **trained, not hand-tuned**: a logistic regression on IBM's public Telco
 Customer Churn data, evaluated on a held-out test set. The training and analysis live in the
-companion repo, [`project`](https://github.com/jayraj0975/project); this repo carries a
+companion repo, [`customer-churn-analysis`](https://github.com/jayraj0975/customer-churn-analysis); this repo carries a
 self-contained training script so the app can be regenerated on its own.
 
 ![Predictor](docs/predictor.png)
