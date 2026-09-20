@@ -2,6 +2,8 @@
 
 [![ci](https://github.com/jayraj0975/churnapp/actions/workflows/ci.yml/badge.svg)](https://github.com/jayraj0975/churnapp/actions/workflows/ci.yml)
 
+**Live demo: https://customer-churn-predictor-sr-45ad.vercel.app**
+
 An interactive app that scores how likely a telecom customer is to leave, shows which factors
 push that score up or down, and lets you test retention what-ifs. Built with React, TypeScript
 and Express, and installable as a PWA.
@@ -10,6 +12,8 @@ The model behind it is **trained, not hand-tuned**: a logistic regression on IBM
 Customer Churn data, evaluated on a held-out test set. The training and analysis live in the
 companion repo, [`customer-churn-analysis`](https://github.com/jayraj0975/customer-churn-analysis); this repo carries a
 self-contained training script so the app can be regenerated on its own.
+
+![Demo: scoring, what-if, portfolio, diagnostics and a retention plan](docs/demo.gif)
 
 ![Predictor](docs/predictor.png)
 
