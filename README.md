@@ -13,6 +13,13 @@ self-contained training script so the app can be regenerated on its own.
 
 ![Predictor](docs/predictor.png)
 
+## Live demo
+
+The demo is deployed as a **static site**: the model runs in the browser, so predictions, factor contributions, what-if
+simulations, the portfolio view and the diagnostics all work with no server. The one thing it does not have is the optional
+Gemini-written outreach text, which needs a server-side API key, so retention plans on the demo come from the deterministic
+playbook (the screen labels which kind it is). Run it locally with a key to get the Gemini wording.
+
 ## The model, honestly
 
 | | |
