@@ -1,6 +1,0 @@
-{
-  "name": "Customer Churn Predictor",
-  "description": "Predict customer churn probability, analyze risk factors, simulate what-if retention strategies, and generate personalized retention interventions.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
