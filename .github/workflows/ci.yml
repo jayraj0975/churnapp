@@ -15,3 +15,11 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: The built server starts and serves the app and its routes
+        # A green typecheck and unit tests did not notice that Express 5 crashed this server at start-up.
+        run: |
+          NODE_ENV=production PORT=3000 node dist/server.cjs &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:3000/api/health >/dev/null && break; sleep 1; done
+          for path in / /some/deep/route /api/health /api/model-info /manifest.json /sw.js; do
+            curl -sSf -o /dev/null "http://127.0.0.1:3000$path" || { echo "GET $path failed"; exit 1; }
+          done
