@@ -102,8 +102,8 @@ app.get(['/manifest.json', '/manifest.webmanifest'], (req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=3600');
-  const manifestPath = path.join(process.cwd(), 'public', 'manifest.json');
-  res.sendFile(manifestPath);
+  // An explicit root keeps this working when the app lives under a dot-directory (Express 5 refuses those).
+  res.sendFile('manifest.json', { root: path.join(process.cwd(), 'public') });
 });
 
 app.get('/sw.js', (req, res) => {
@@ -111,8 +111,7 @@ app.get('/sw.js', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Service-Worker-Allowed', '/');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  const swPath = path.join(process.cwd(), 'public', 'sw.js');
-  res.sendFile(swPath);
+  res.sendFile('sw.js', { root: path.join(process.cwd(), 'public') });
 });
 
 // Enable CORS for static PWA assets
@@ -136,8 +135,8 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get('/{*splat}', (req, res) => {
+      res.sendFile('index.html', { root: distPath });
     });
   }
 
