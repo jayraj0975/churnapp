@@ -45,9 +45,9 @@ export interface PredictionResult {
   willChurn: boolean; // based on threshold (default 0.50)
   threshold: number;
   logit: number;
-  expectedAnnualLoss: number; // annual billing x churn probability, $
+  expectedAnnualExposure: number; // annual billing x predicted churn probability, $ (a modeled expectation, not an observed loss)
   monthlyRevenueAtRisk: number;
-  annualRevenueAtRisk: number; // 12 months of billing, $
+  annualRevenueAtRisk: number; // 12 months of billing, $ (the amount the probability applies to)
   topRiskDrivers: RiskFactorContribution[];
   topProtectiveFactors: RiskFactorContribution[];
   retentionRecommendation: string;

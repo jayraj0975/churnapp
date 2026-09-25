@@ -143,7 +143,7 @@ export function calculateChurnPrediction(profile: CustomerProfile, threshold: nu
   // Deliberately not a lifetime-value estimate: the data has no revenue history.
   const monthlyRevenueAtRisk = profile.monthlyCharges;
   const annualRevenueAtRisk = Math.round(monthlyRevenueAtRisk * 12);
-  const expectedAnnualLoss = Math.round(annualRevenueAtRisk * probability);
+  const expectedAnnualExposure = Math.round(annualRevenueAtRisk * probability);
 
   // Playbook suggestions are plain rules keyed off the profile, not model output.
   let retentionRecommendation = 'Low predicted risk. Keep the regular check-in cadence.';
@@ -174,7 +174,7 @@ export function calculateChurnPrediction(profile: CustomerProfile, threshold: nu
     willChurn: probability >= threshold,
     threshold,
     logit: Math.round(z * 100) / 100,
-    expectedAnnualLoss,
+    expectedAnnualExposure,
     monthlyRevenueAtRisk,
     annualRevenueAtRisk,
     topRiskDrivers,
@@ -197,7 +197,7 @@ export function simulateWhatIf(
   baselineResult: PredictionResult;
   simulatedResult: PredictionResult;
   probabilityDelta: number;
-  annualRevenueSaved: number;
+  modeledExposureReduction: number;
   newRiskLevel: RiskLevel;
 } {
   const baselineResult = calculateChurnPrediction(baselineProfile);
@@ -215,11 +215,12 @@ export function simulateWhatIf(
   const simulatedResult = calculateChurnPrediction(modified);
   const probabilityDelta = Math.round((simulatedResult.churnProbability - baselineResult.churnProbability) * 10) / 10;
 
-  // Expected annual billing kept if the change lowers the predicted risk.
+  // The model-predicted fall in expected annual billing exposure if the change lowers the predicted
+  // risk. It is an association learned from past customers, not money the business is guaranteed to keep.
   const reduction = Math.max(0, (baselineResult.churnProbability - simulatedResult.churnProbability) / 100);
-  const annualRevenueSaved = Math.round(baselineResult.annualRevenueAtRisk * reduction);
+  const modeledExposureReduction = Math.round(baselineResult.annualRevenueAtRisk * reduction);
 
-  return { baselineResult, simulatedResult, probabilityDelta, annualRevenueSaved, newRiskLevel: simulatedResult.riskLevel };
+  return { baselineResult, simulatedResult, probabilityDelta, modeledExposureReduction, newRiskLevel: simulatedResult.riskLevel };
 }
 
 export interface Lever {
@@ -269,7 +270,7 @@ export function buildFallbackStrategy(profile: CustomerProfile, prediction: Pred
           title: l.title,
           impactEstimate: `${l.delta.toFixed(1)} points predicted churn (model what-if)`,
           costToBusiness: l.cost,
-          roiVerdict: `Expected annual billing retained: $${Math.round(prediction.annualRevenueAtRisk * (-l.delta / 100))} (association, not a guarantee).`,
+          roiVerdict: `Modeled reduction in expected annual billing exposure: $${Math.round(prediction.annualRevenueAtRisk * (-l.delta / 100))} (an association from past customers, not a guarantee).`,
         }))
       : [{
           title: 'No model-backed lever found',
@@ -550,7 +551,11 @@ export function metricsAt(threshold: number) {
 }
 
 /** Everything the diagnostics page shows about the model, all from `model.json`. */
+/** Where the serving model came from: version, training commit, data hash, library versions. */
+export const MODEL_PROVENANCE = M.provenance;
+
 export const MODEL_METRICS = {
+  modelVersion: M.modelVersion,
   algorithm: M.algorithm,
   dataset: `${M.trainedOn} (${(M.nTrain + M.nTest).toLocaleString()} customers)`,
   split: `${M.nTrain.toLocaleString()} train / ${M.nTest.toLocaleString()} held-out test`,

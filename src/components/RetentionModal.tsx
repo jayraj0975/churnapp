@@ -80,7 +80,7 @@ export const RetentionModal: React.FC<RetentionModalProps> = ({
               </span>
             </div>
             <div className="text-slate-600">
-              <span className="font-semibold text-slate-900">${prediction.annualRevenueAtRisk}</span> / yr at risk
+              <span className="font-semibold text-slate-900">${prediction.annualRevenueAtRisk}</span> / yr of annual billing exposed
             </div>
           </div>
 
@@ -91,7 +91,7 @@ export const RetentionModal: React.FC<RetentionModalProps> = ({
                 Synthesizing prescriptive retention strategy...
               </p>
               <p className="text-[11px] text-slate-400">
-                Analyzing feature weights, lifetime value, and discount elasticity
+                Building the plan from the model's own what-if results
               </p>
             </div>
           ) : retentionData ? (

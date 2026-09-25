@@ -150,32 +150,32 @@ export default function App() {
                 <div className="grid grid-cols-3 gap-2.5">
                   <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      MRR at Risk
+                      Monthly billing
                     </span>
                     <span className="text-lg font-extrabold text-slate-900 mt-0.5 block">
                       ${prediction.monthlyRevenueAtRisk.toFixed(2)}
                     </span>
-                    <span className="text-[10px] text-slate-400">Monthly billing</span>
+                    <span className="text-[10px] text-slate-400">Current bill</span>
                   </div>
 
                   <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Annual Exposure
+                      Annual billing
                     </span>
                     <span className="text-lg font-extrabold text-rose-700 mt-0.5 block">
                       ${prediction.annualRevenueAtRisk}
                     </span>
-                    <span className="text-[10px] text-slate-400">12-mo run-rate</span>
+                    <span className="text-[10px] text-slate-400">12 months of billing</span>
                   </div>
 
                   <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Expected annual loss
+                      Expected annual billing exposure
                     </span>
                     <span className="text-lg font-extrabold text-indigo-700 mt-0.5 block">
-                      ${prediction.expectedAnnualLoss}
+                      ${prediction.expectedAnnualExposure}
                     </span>
-                    <span className="text-[10px] text-slate-400">Annual billing x churn probability</span>
+                    <span className="text-[10px] text-slate-400">Annual billing x predicted churn probability (modeled, not an observed loss)</span>
                   </div>
                 </div>
 

@@ -69,7 +69,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
             "What-If" Sensitivity Simulator & Intervention Sandbox
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Test retention levers in real-time to observe dynamic risk reduction and revenue saved.
+            Test retention levers in real-time to observe the model-predicted change in risk and in expected annual billing exposure.
           </p>
         </div>
         <button
@@ -106,7 +106,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
             </span>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-500">
-            ${simulation.baselineResult.annualRevenueAtRisk}/yr revenue at hazard
+            ${simulation.baselineResult.annualRevenueAtRisk}/yr of billing exposed
           </div>
         </div>
 
@@ -121,11 +121,11 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
               <span>{Math.abs(simulation.probabilityDelta)}%</span>
             </div>
             <span className="text-xs font-semibold text-indigo-900 block mt-1">
-              {simulation.probabilityDelta < 0 ? 'Risk Drop Achieved' : 'Risk Change'}
+              {simulation.probabilityDelta < 0 ? 'Predicted risk drop' : 'Risk Change'}
             </span>
           </div>
           <div className="text-xs font-bold text-emerald-700 bg-white/80 px-2.5 py-1 rounded-md border border-emerald-200 w-full">
-            +${simulation.annualRevenueSaved}/yr Protected
+            Modeled exposure reduction: ${simulation.modeledExposureReduction}/yr
           </div>
         </div>
 
@@ -151,7 +151,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
             </span>
           </div>
           <div className="mt-4 pt-3 border-t border-emerald-200 text-xs text-emerald-700 font-medium">
-            Expected annual loss: ${simulation.simulatedResult.expectedAnnualLoss}
+            Expected annual billing exposure: ${simulation.simulatedResult.expectedAnnualExposure}
           </div>
         </div>
       </div>

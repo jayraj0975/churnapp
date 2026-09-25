@@ -8,10 +8,14 @@ An interactive app that scores how likely a telecom customer is to leave, shows 
 push that score up or down, and lets you test retention what-ifs. Built with React, TypeScript
 and Express, and installable as a PWA.
 
-The model behind it is **trained, not hand-tuned**: a logistic regression on IBM's public Telco
-Customer Churn data, evaluated on a held-out test set. The training and analysis live in the
-companion repo, [`customer-churn-analysis`](https://github.com/jayraj0975/customer-churn-analysis); this repo carries a
-self-contained training script so the app can be regenerated on its own.
+The model behind it is **trained, not hand-tuned**: an unweighted logistic regression on IBM's public Telco
+Customer Churn data, evaluated on a held-out test set. `scripts/train_model.py` trains it (the dataset is pinned by
+SHA-256) and reproduces the committed `model.json` exactly.
+
+**How this relates to the other churn repos.** The companion [`customer-churn-analysis`](https://github.com/jayraj0975/customer-churn-analysis)
+is a broader model comparison on the same public dataset, and the model it selects (by cross-validation) is a random forest, which is **not**
+what this app serves. This web app and [`churn-predictor-android`](https://github.com/jayraj0975/churn-predictor-android) serve the same
+logistic-regression model: the Android app's coefficients are exported from this app's `model.json`.
 
 ![Demo: scoring, what-if, portfolio, diagnostics and a retention plan](docs/demo.gif)
 
@@ -65,6 +69,12 @@ checks the TypeScript predictions against scikit-learn's **to 1e-9**.
   numbers to Gemini, which only writes the wording. Without an API key, a deterministic plan built
   from the same numbers is returned.
 - **Inputs are validated** on every endpoint (types, ranges, allowed values) and bodies are size-limited.
+- **The money figures are modeled exposure, not observed loss.** *Annual billing* is the monthly bill times 12. *Expected annual billing
+  exposure* is that amount times the predicted churn probability. *Modeled exposure reduction* (what-if) is how much that expectation falls
+  when a change lowers the predicted risk. The data has no revenue history, so none of this is lifetime value, and none of it is money
+  a business is guaranteed to keep: it inherits the association-not-causation caveat below.
+- **Model provenance** is shown on the Diagnostics screen and in `GET /api/model-info`: app and model version, training commit, dataset
+  SHA-256, feature-schema hash and library versions.
 
 ## Run it
 
@@ -76,16 +86,34 @@ npm run check          # typecheck + tests
 npm run build && npm start
 ```
 
-Optional, for AI-written outreach text: copy `.env.example` to `.env` and set `GEMINI_API_KEY`.
+Optional, for Gemini-written outreach text: copy `.env.example` to `.env` and set `GEMINI_API_KEY` (the server loads `.env` itself; the key
+stays on the server and is never sent to the browser or logged).
 To regenerate the model (needs Python with pandas and scikit-learn): `npm run train-model`.
+
+### Running the server on the internet
+
+The public demo is a static site with no server, so none of this applies to it. If you self-host the Express server:
+
+| Protection | Setting (default) |
+|---|---|
+| Per-client rate limit on every `/api` route, answering `429` with `Retry-After` | `API_RATE_LIMIT_PER_MIN` (120) |
+| Stricter per-client limit on `POST /api/retention-strategy` when Gemini is configured | `GEMINI_RATE_LIMIT_PER_MIN` (5) |
+| Ceiling on Gemini calls across all clients | `GEMINI_MAX_CALLS_PER_HOUR` (100) |
+| Cut-off for a Gemini call that does not answer | `GEMINI_TIMEOUT_MS` (12000) |
+| Client address behind a reverse proxy | `TRUST_PROXY=1` (off by default; without it every client shares the proxy's address) |
+
+When Gemini is rate-limited, slow, down, or returns something malformed, the endpoint returns the deterministic plan (header
+`X-Retention-Source` says which one you got) instead of failing. The limiter is in-memory and per process, so it slows one client down
+but is not protection against a distributed flood; put a proxy or CDN limit in front of a public deployment. There is no
+authentication.
 
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/predict` | score one customer profile |
 | `POST /api/simulate-what-if` | score a profile with adjustments applied |
 | `POST /api/retention-strategy` | retention plan for a profile |
-| `GET /api/metrics` | measured model metrics |
-| `GET /api/health` | liveness |
+| `GET /api/model-info` (or `/api/metrics`) | measured model metrics and provenance |
+| `GET /api/health` | liveness, and whether a Gemini key is configured |
 
 ## Limitations
 

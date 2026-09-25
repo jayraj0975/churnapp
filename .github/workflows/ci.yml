@@ -1,5 +1,8 @@
 name: ci
 on: [push, pull_request]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -23,3 +26,14 @@ jobs:
           for path in / /some/deep/route /api/health /api/model-info /manifest.json /sw.js; do
             curl -sSf -o /dev/null "http://127.0.0.1:3000$path" || { echo "GET $path failed"; exit 1; }
           done
+      - name: A local .env is loaded, the rate limit answers 429, and no secret reaches the browser bundle
+        run: |
+          pkill -f "node dist/server.cjs" || true
+          printf 'GEMINI_API_KEY="AIzaSyFAKE_CI_KEY_0123456789abcdefghij"\nAPI_RATE_LIMIT_PER_MIN=5\n' > .env
+          NODE_ENV=production PORT=3001 node dist/server.cjs &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:3001/api/health >/dev/null && break; sleep 1; done
+          curl -s http://127.0.0.1:3001/api/health | grep -q '"geminiConfigured":true' || { echo ".env was not loaded"; exit 1; }
+          codes=""; for i in $(seq 1 8); do codes="$codes $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/model-info)"; done
+          echo "status codes:$codes"; echo "$codes" | grep -q 429 || { echo "no 429 after the limit"; exit 1; }
+          if grep -rIl "GEMINI\|AIzaSy" dist/assets dist/index.html; then echo "a secret name or key is in the browser bundle"; exit 1; fi
+          rm -f .env

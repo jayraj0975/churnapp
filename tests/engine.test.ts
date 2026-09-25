@@ -42,7 +42,7 @@ test('risk bands and threshold follow the probability', () => {
   assert.equal(r.riskLevel, expected);
   assert.equal(r.willChurn, churnProbability(base) >= 0.35);
   assert.equal(r.annualRevenueAtRisk, Math.round(base.monthlyCharges * 12));
-  assert.equal(r.expectedAnnualLoss, Math.round(r.annualRevenueAtRisk * churnProbability(base)));
+  assert.equal(r.expectedAnnualExposure, Math.round(r.annualRevenueAtRisk * churnProbability(base)));
 });
 
 test('factor contributions have consistent signs and no invented numbers', () => {
@@ -52,13 +52,13 @@ test('factor contributions have consistent signs and no invented numbers', () =>
   for (const f of r.topProtectiveFactors) assert.ok(f.impactPercentage < 0 && f.direction === 'reduces_risk');
 });
 
-test('what-if delta matches re-scoring, and never reports negative savings', () => {
+test('what-if delta matches re-scoring, and never reports a negative exposure reduction', () => {
   const sim = simulateWhatIf(base, { contract: 'Two year' });
   const direct = calculateChurnPrediction({ ...base, contract: 'Two year' });
   assert.equal(sim.simulatedResult.churnProbability, direct.churnProbability);
-  assert.ok(sim.probabilityDelta < 0 && sim.annualRevenueSaved > 0);
+  assert.ok(sim.probabilityDelta < 0 && sim.modeledExposureReduction > 0);
   const worse = simulateWhatIf(CUSTOMER_PRESETS[2].profile, { contract: 'Month-to-month' });
-  assert.ok(worse.annualRevenueSaved >= 0);
+  assert.ok(worse.modeledExposureReduction >= 0);
 });
 
 test('standard levers only include ones the model says help, best first', () => {

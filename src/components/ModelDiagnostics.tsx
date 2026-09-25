@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { MODEL_METRICS, metricsAt } from '../lib/churnEngine';
+import { MODEL_METRICS, MODEL_PROVENANCE, metricsAt } from '../lib/churnEngine';
+import pkg from '../../package.json';
 import { Brain, CheckCircle2, AlertCircle, BarChart3, Sliders, Info, ShieldCheck } from 'lucide-react';
 
 interface ModelDiagnosticsProps {
@@ -207,6 +208,12 @@ export const ModelDiagnostics: React.FC<ModelDiagnosticsProps> = ({
           PR-AUC {MODEL_METRICS.prAuc.toFixed(3)} (a no-skill model scores {MODEL_METRICS.testChurnRate.toFixed(2)}). Brier {MODEL_METRICS.brier.toFixed(3)}{' '}
           against {MODEL_METRICS.brierNoSkill.toFixed(3)} for always predicting the average. The data is observational, so
           drivers and what-if results describe association, not cause.
+        </p>
+        <p className="text-[11px] text-slate-500 font-mono break-words" data-testid="model-provenance">
+          App v{pkg.version} &middot; model v{MODEL_METRICS.modelVersion} &middot; trained {MODEL_METRICS.trainedDate}
+          {MODEL_PROVENANCE.trainingCommit ? ` \u00b7 commit ${MODEL_PROVENANCE.trainingCommit.slice(0, 7)}` : ''}
+          {' '}&middot; data SHA-256 {MODEL_PROVENANCE.dataSha256.slice(0, 12)}&hellip; &middot; feature schema {MODEL_PROVENANCE.featureSchemaSha256.slice(0, 8)}
+          &middot; coefficients {MODEL_PROVENANCE.coefficientsSha256.slice(0, 8)}
         </p>
       </div>
     </div>

@@ -1,100 +1,32 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
-import { buildFallbackStrategy, calculateChurnPrediction, simulateWhatIf, standardLevers, MODEL_METRICS } from './src/lib/churnEngine.ts';
-import { validateAdjustments, validateProfile } from './src/lib/validate.ts';
-import { CustomerProfile, WhatIfAdjustments } from './src/types.ts';
+import { createApp } from './src/server/app.ts';
+import type { GeminiLike } from './src/server/gemini.ts';
 
-const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const PLACEHOLDER = 'MY_GEMINI_API_KEY';
 
-app.use(express.json({ limit: '50kb' }));
-
-// Lazy-initialized Gemini client
+// Lazy-initialized Gemini client. The key is read from the environment (or a local .env file) on the
+// server only; it is never sent to the browser and never logged.
+const geminiKey = process.env.GEMINI_API_KEY;
 let genAIClient: GoogleGenAI | null = null;
-function getGenAIClient(): GoogleGenAI | null {
-  if (genAIClient) return genAIClient;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
-    genAIClient = new GoogleGenAI({ apiKey });
-    return genAIClient;
+function getGenAIClient(): GeminiLike | null {
+  if (genAIClient) return genAIClient as unknown as GeminiLike;
+  if (geminiKey && geminiKey !== PLACEHOLDER) {
+    genAIClient = new GoogleGenAI({ apiKey: geminiKey });
+    return genAIClient as unknown as GeminiLike;
   }
   return null;
 }
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Model Prediction API
-app.post('/api/predict', (req, res) => {
-  const error = validateProfile(req.body);
-  if (error) return res.status(400).json({ error });
-  const threshold = req.body.threshold === undefined ? 0.5 : Number(req.body.threshold);
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
-    return res.status(400).json({ error: 'threshold must be a number between 0 and 1' });
-  }
-  return res.json(calculateChurnPrediction(req.body as CustomerProfile, threshold));
-});
-
-// What-If Simulation API
-app.post(['/api/simulate-what-if', '/api/simulate'], (req, res) => {
-  const { profile, adjustments } = req.body ?? {};
-  const error = validateProfile(profile) ?? validateAdjustments(adjustments);
-  if (error) return res.status(400).json({ error });
-  return res.json(simulateWhatIf(profile as CustomerProfile, adjustments as WhatIfAdjustments));
-});
-
-// Model Metadata & Diagnostics API
-app.get(['/api/model-info', '/api/metrics'], (req, res) => {
-  res.json(MODEL_METRICS);
-});
-
-// Retention Strategy Generator (Gemini, with a deterministic fallback).
-// The prediction and the impact figures are computed here from the model, never
-// taken from the client and never invented by the LLM.
-app.post('/api/retention-strategy', async (req, res) => {
-  const profile = req.body?.profile;
-  const error = validateProfile(profile);
-  if (error) return res.status(400).json({ error });
-
-  const customer = profile as CustomerProfile;
-  const prediction = calculateChurnPrediction(customer);
-  const levers = standardLevers(customer).slice(0, 3);
-
-  const ai = getGenAIClient();
-  if (ai) {
-    try {
-      const prompt = `You are a customer-retention strategist. Write a retention plan for one customer.
-Use ONLY the numbers given below. Do not invent statistics, percentages or prices.
-
-Customer: ${customer.name}, tenure ${customer.tenure} months, ${customer.contract} contract, ${customer.internetService} internet,
-tech support ${customer.techSupport ? 'yes' : 'no'}, online security ${customer.onlineSecurity ? 'yes' : 'no'},
-$${customer.monthlyCharges}/month, pays by ${customer.paymentMethod}.
-Model-predicted churn probability: ${prediction.churnProbability}% (${prediction.riskLevel} risk).
-Top risk drivers: ${prediction.topRiskDrivers.map((d) => d.featureName).join('; ') || 'none'}.
-Model what-if results (change in predicted churn, in points): ${
-        levers.map((l) => `${l.title}: ${l.delta.toFixed(1)}`).join('; ') || 'no lever lowers the risk'
-      }.
-
-Return JSON only, with this shape:
-{"customerName": string, "riskSummary": string (1-2 sentences),
- "recommendedIncentives": [{"title": string, "impactEstimate": string (quote the what-if number above), "costToBusiness": string (say it is an example), "roiVerdict": string}],
- "actionScript": {"channel": "Email" | "Phone Call", "subjectOrOpener": string, "messageBody": string},
- "timingRecommendation": string, "aiGenerated": true}`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: prompt,
-        config: { responseMimeType: 'application/json' },
-      });
-      if (response.text) return res.json(JSON.parse(response.text));
-    } catch (geminiErr) {
-      console.warn('Gemini call failed, using the deterministic plan:', geminiErr);
-    }
-  }
-  return res.json(buildFallbackStrategy(customer, prediction));
+// Only trust X-Forwarded-For when told a reverse proxy is in front (TRUST_PROXY=1 for one hop).
+const trust = process.env.TRUST_PROXY;
+const app = createApp({
+  getGeminiClient: getGenAIClient,
+  geminiKey,
+  trustProxy: trust === undefined ? undefined : /^\d+$/.test(trust) ? Number(trust) : trust === 'true',
 });
 
 // PWA Manifest and Service Worker routes with CORS for PWABuilder & external scanners
@@ -140,9 +72,13 @@ async function start() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Churn Predictor server running on http://0.0.0.0:${PORT}`);
   });
+  // Bounded timeouts, so a slow or stalled client cannot hold a connection open indefinitely.
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 30_000;
+  server.keepAliveTimeout = 5_000;
 }
 
 start();

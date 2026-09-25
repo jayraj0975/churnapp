@@ -16,7 +16,10 @@ Run:  python scripts/train_model.py     ->  src/lib/model.json
 
 from __future__ import annotations
 
+import hashlib
 import json
+import platform
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -37,6 +40,9 @@ OUT = ROOT / "src" / "lib" / "model.json"
 URL = ("https://raw.githubusercontent.com/IBM/watsonx-ai-samples/master/cpd4.8/"
        "data/customer_churn/WA_FnUseC_TelcoCustomerChurn.csv")
 SEED = 42
+MODEL_VERSION = "1.0.0"   # bump when the coefficients, features or training protocol change
+# The public IBM Telco file, pinned: a changed or truncated download is refused, not silently trained on.
+DATA_SHA256 = "3d5c233415c1b42bdea7172c73e620819f507f0a8294bc2337a1d8a8877feef0"
 THRESHOLDS = [round(t, 2) for t in np.arange(0.20, 0.801, 0.05)]
 
 # key -> (label shown in the app, category shown in the app)
@@ -70,6 +76,10 @@ def load() -> pd.DataFrame:
     if not DATA.exists():
         DATA.parent.mkdir(parents=True, exist_ok=True)
         DATA.write_bytes(urlopen(URL, timeout=30).read())
+    digest = hashlib.sha256(DATA.read_bytes()).hexdigest()
+    if digest != DATA_SHA256:
+        sys.exit(f"{DATA} has SHA-256 {digest}, expected {DATA_SHA256}. Delete it to re-download, "
+                 "or update DATA_SHA256 after reviewing the change.")
     df = pd.read_csv(DATA)
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     return df.dropna(subset=["TotalCharges"]).reset_index(drop=True)
@@ -116,6 +126,14 @@ def profile_of(row: pd.Series) -> dict:
         "dependents": row["Dependents"] == "Yes", "phoneService": row["PhoneService"] == "Yes",
         "multipleLines": row["MultipleLines"] == "Yes",
     }
+
+
+def git(*args: str):
+    try:
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
+                              check=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 def main() -> None:
@@ -180,7 +198,27 @@ def main() -> None:
     golden = [{"profile": profile_of(r), "probability": float(p)}
               for (_, r), p in zip(golden_rows.iterrows(), p_te[:8])]
 
+    core = json.dumps({"intercept": intercept_raw, "coefficients": coef, "features": list(FEATURES)},
+                      sort_keys=True)
+    provenance = {
+        "modelVersion": MODEL_VERSION,
+        "trainingCommit": git("rev-parse", "HEAD"),
+        "trainingCodeDirty": bool(git("status", "--porcelain", "--", "scripts", "requirements.txt")),
+        "dataSource": URL,
+        "dataSha256": DATA_SHA256,
+        "dataRows": int(len(df)),
+        "featureSchemaSha256": hashlib.sha256("\n".join(FEATURES).encode()).hexdigest(),
+        "coefficientsSha256": hashlib.sha256(core.encode()).hexdigest(),
+        "algorithm": "Logistic regression, L2, unweighted",
+        "calibration": "none applied; an unweighted logistic regression is checked against five reliability bins",
+        "trainingWindow": "not applicable: the dataset has no dates, the split is a random stratified 80/20",
+        "evaluationWindow": "not applicable (same reason)",
+        "python": platform.python_version(), "sklearn": sklearn.__version__,
+        "numpy": np.__version__, "pandas": pd.__version__,
+    }
     model = {
+        "modelVersion": MODEL_VERSION,
+        "provenance": provenance,
         "algorithm": "Logistic regression (L2, unweighted)",
         "trainedOn": "IBM Telco Customer Churn",
         "trainedDate": date.today().isoformat(),

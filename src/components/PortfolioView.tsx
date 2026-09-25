@@ -218,7 +218,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
         </div>
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
           <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider block">
-            MRR at Hazard
+            Monthly billing of flagged accounts
           </span>
           <span className="text-xl font-extrabold text-amber-800 mt-0.5 block">
             ${aggregateMetrics.totalMrrAtRisk}/mo
