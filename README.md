@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/jayraj0975/churnapp/actions/workflows/ci.yml/badge.svg)](https://github.com/jayraj0975/churnapp/actions/workflows/ci.yml)
 
-**Live demo: https://customer-churn-predictor-sr-45ad.vercel.app**
+**[Live demo: customer-churn-predictor-sr-45ad.vercel.app](https://customer-churn-predictor-sr-45ad.vercel.app)**
 
 An interactive app that scores how likely a telecom customer is to leave, shows which factors
 push that score up or down, and lets you test retention what-ifs. Built with React, TypeScript
