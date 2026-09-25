@@ -97,6 +97,7 @@ The public demo is a static site with no server, so none of this applies to it. 
 | Protection | Setting (default) |
 |---|---|
 | Per-client rate limit on every `/api` route, answering `429` with `Retry-After` | `API_RATE_LIMIT_PER_MIN` (120) |
+| Per-client rate limit on everything else: the app's files, the service worker and the PWA routes | `PAGE_RATE_LIMIT_PER_MIN` (600) |
 | Stricter per-client limit on `POST /api/retention-strategy` when Gemini is configured | `GEMINI_RATE_LIMIT_PER_MIN` (5) |
 | Ceiling on Gemini calls across all clients | `GEMINI_MAX_CALLS_PER_HOUR` (100) |
 | Cut-off for a Gemini call that does not answer | `GEMINI_TIMEOUT_MS` (12000) |

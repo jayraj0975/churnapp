@@ -16,6 +16,9 @@ export interface AppOptions {
   now?: () => number;
   /** General limit for every /api route, per client address. */
   apiLimit?: { windowMs: number; max: number };
+  /** Limit for everything else (the app, its files, the PWA routes), per client address. A page load
+   *  fetches dozens of files, so this is far more generous than the API limit. */
+  pageLimit?: { windowMs: number; max: number };
   /** Stricter limit on the route that can spend Gemini quota, per client address. */
   geminiLimit?: { windowMs: number; max: number };
   /** Ceiling on Gemini calls across all clients, so one instance has a bounded bill. */
@@ -42,6 +45,7 @@ export function createApp(opts: AppOptions = {}) {
   app.disable('x-powered-by');
 
   const apiLimiter = createRateLimiter({ ...(opts.apiLimit ?? { windowMs: 60_000, max: envInt('API_RATE_LIMIT_PER_MIN', 120) }), now });
+  const pageLimiter = createRateLimiter({ ...(opts.pageLimit ?? { windowMs: 60_000, max: envInt('PAGE_RATE_LIMIT_PER_MIN', 600) }), now });
   const geminiLimiter = createRateLimiter({ ...(opts.geminiLimit ?? { windowMs: 60_000, max: envInt('GEMINI_RATE_LIMIT_PER_MIN', 5) }), now });
   const geminiHourly = createRateLimiter({ windowMs: 3_600_000, max: opts.geminiHourlyCap ?? envInt('GEMINI_MAX_CALLS_PER_HOUR', 100), now });
 
@@ -55,6 +59,10 @@ export function createApp(opts: AppOptions = {}) {
   });
 
   app.use('/api', apiLimiter.middleware);
+  // Static files, the service worker and the single-page-app fallback are served by routes added after this
+  // app is created, and they read the file system, so they are rate-limited too (the API has its own limit above).
+  app.use((req: Request, res: Response, next: NextFunction) =>
+    req.path.startsWith('/api') ? next() : pageLimiter.middleware(req, res, next));
   app.use(express.json({ limit: '50kb' }));
 
   app.get('/api/health', (_req, res) => {

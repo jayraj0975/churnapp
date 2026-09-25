@@ -72,6 +72,20 @@ test('API routes answer 429 with Retry-After once a client exceeds the limit', a
   });
 });
 
+test('pages and static routes have their own, more generous limit and never touch the API limit', async () => {
+  await withServer({ apiLimit: { windowMs: 60_000, max: 2 }, pageLimit: { windowMs: 60_000, max: 4 } }, async (url) => {
+    // page requests (these 404 in the test app, which serves no files, but they are counted and limited)
+    const pages: number[] = [];
+    for (let i = 0; i < 6; i++) pages.push((await fetch(`${url}/some/page`)).status);
+    assert.deepEqual(pages.map((c) => c === 429), [false, false, false, false, true, true]);
+    assert.ok(Number((await fetch(`${url}/manifest.json`)).headers.get('retry-after')) >= 1);
+    // the API is limited separately: the exhausted page limit does not use up its allowance
+    assert.equal((await fetch(`${url}/api/health`)).status, 200);
+    assert.equal((await fetch(`${url}/api/health`)).status, 200);
+    assert.equal((await fetch(`${url}/api/health`)).status, 429);
+  });
+});
+
 test('every response carries a request id, and a sane incoming one is kept', async () => {
   await withServer({}, async (url) => {
     assert.match((await fetch(`${url}/api/health`)).headers.get('x-request-id') ?? '', /^[0-9a-f-]{36}$/);
