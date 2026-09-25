@@ -2,8 +2,8 @@
   "modelVersion": "1.0.0",
   "provenance": {
     "modelVersion": "1.0.0",
-    "trainingCommit": "aec0178c0d8e724db1bd1ed037c0a2433206d937",
-    "trainingCodeDirty": true,
+    "trainingCommit": "3d29b62fd9fee2bfeff319ce71178fb6d6e53f9b",
+    "trainingCodeDirty": false,
     "dataSource": "https://raw.githubusercontent.com/IBM/watsonx-ai-samples/master/cpd4.8/data/customer_churn/WA_FnUseC_TelcoCustomerChurn.csv",
     "dataSha256": "3d5c233415c1b42bdea7172c73e620819f507f0a8294bc2337a1d8a8877feef0",
     "dataRows": 7032,
