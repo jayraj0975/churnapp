@@ -31,8 +31,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "express": "^5.2.1",
-    "dotenv": "^18.0.3",
-    "motion": "^13.4.3"
+    "dotenv": "^18.0.4",
+    "motion": "^13.4.4"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
