@@ -1,22 +1,27 @@
-import React, { useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { CustomerProfile, RiskLevel } from '../types';
 import { calculateChurnPrediction } from '../lib/churnEngine';
-import { Users, Search, Download, Plus, ArrowUpRight, Filter, AlertTriangle, ShieldCheck, Clock } from 'lucide-react';
+import { CSV_IMPORT_TEMPLATE, importCustomersCsv, MAX_IMPORT_BYTES } from '../lib/csv';
+import { Users, Search, Download, Upload, Plus, ArrowUpRight, Filter, AlertTriangle, ShieldCheck, Clock } from 'lucide-react';
 
 interface PortfolioViewProps {
   portfolio: CustomerProfile[];
   onSelectCustomer: (customer: CustomerProfile) => void;
   onAddCustomer: (customer: CustomerProfile) => void;
+  onImportCustomers: (customers: CustomerProfile[]) => void;
 }
 
 export const PortfolioView: React.FC<PortfolioViewProps> = ({
   portfolio,
   onSelectCustomer,
   onAddCustomer,
+  onImportCustomers,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [riskFilter, setRiskFilter] = useState<'All' | RiskLevel>('All');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New customer form state
   const [newCustomer, setNewCustomer] = useState<Partial<CustomerProfile>>({
@@ -116,6 +121,37 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     document.body.removeChild(link);
   };
 
+  const handleDownloadTemplate = () => {
+    const link = document.createElement('a');
+    link.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(CSV_IMPORT_TEMPLATE));
+    link.setAttribute('download', 'churn_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // CSV Import: parsed and validated entirely client-side, nothing leaves the browser
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file name after a failed attempt
+    if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) {
+      setImportResult({ imported: 0, errors: [`File is larger than ${MAX_IMPORT_BYTES / 1024 / 1024}MB; split it into smaller batches.`] });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      const { profiles, errors } = importCustomersCsv(text);
+      if (profiles.length > 0) onImportCustomers(profiles);
+      setImportResult({ imported: profiles.length, errors });
+    };
+    reader.onerror = () => {
+      setImportResult({ imported: 0, errors: ['Could not read the file.'] });
+    };
+    reader.readAsText(file);
+  };
+
   const handleCreateCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomer.name) return;
@@ -185,8 +221,78 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportCSV}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200"
+            title="Upload a CSV of customers to score them all at once"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Import CSV</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+          >
+            Template
+          </button>
         </div>
       </div>
+
+      {importResult && (
+        <div
+          className={`rounded-lg border p-3 text-xs ${
+            importResult.imported > 0
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">
+                {importResult.imported > 0
+                  ? `Imported ${importResult.imported} customer${importResult.imported === 1 ? '' : 's'}.`
+                  : 'No customers were imported.'}
+                {importResult.errors.length > 0 &&
+                  ` ${importResult.errors.length} row${importResult.errors.length === 1 ? '' : 's'} rejected.`}
+              </p>
+              {importResult.errors.length > 0 && (
+                <ul className="mt-1.5 list-disc list-inside space-y-0.5 max-h-28 overflow-y-auto">
+                  {importResult.errors.slice(0, 20).map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                  {importResult.errors.length > 20 && <li>...and {importResult.errors.length - 20} more.</li>}
+                </ul>
+              )}
+              {importResult.imported === 0 && importResult.errors.length === 0 && (
+                <p className="mt-1">
+                  Need the expected format?{' '}
+                  <button type="button" onClick={handleDownloadTemplate} className="underline font-medium">
+                    Download a template
+                  </button>
+                  .
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setImportResult(null)}
+              className="text-current opacity-60 hover:opacity-100 shrink-0"
+              aria-label="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Aggregate KPI Badges */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

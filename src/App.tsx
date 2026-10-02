@@ -76,6 +76,11 @@ export default function App() {
     setPortfolio((prev) => [customer, ...prev]);
   };
 
+  // Add many customers at once (CSV import) in a single state update
+  const handleAddPortfolioCustomers = (customers: CustomerProfile[]) => {
+    setPortfolio((prev) => [...customers, ...prev]);
+  };
+
   // Fetch or generate retention strategy
   const handleGenerateRetention = async () => {
     setIsLoadingRetention(true);
@@ -240,6 +245,7 @@ export default function App() {
             portfolio={portfolio}
             onSelectCustomer={handleSelectPortfolioCustomer}
             onAddCustomer={handleAddPortfolioCustomer}
+            onImportCustomers={handleAddPortfolioCustomers}
           />
         )}
 
