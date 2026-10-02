@@ -2,8 +2,10 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { createApp } from './src/server/app.ts';
 import type { GeminiLike } from './src/server/gemini.ts';
+import type { AnthropicLike } from './src/server/anthropic.ts';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PLACEHOLDER = 'MY_GEMINI_API_KEY';
@@ -21,11 +23,26 @@ function getGenAIClient(): GeminiLike | null {
   return null;
 }
 
+// Lazy-initialized Anthropic client for the AI-investigation endpoint. Same rule: server-only,
+// never sent to the browser, never logged.
+const anthropicKey = process.env.ANTHROPIC_API_KEY;
+let anthropicClient: Anthropic | null = null;
+function getAnthropicClient(): AnthropicLike | null {
+  if (anthropicClient) return anthropicClient as unknown as AnthropicLike;
+  if (anthropicKey) {
+    anthropicClient = new Anthropic({ apiKey: anthropicKey });
+    return anthropicClient as unknown as AnthropicLike;
+  }
+  return null;
+}
+
 // Only trust X-Forwarded-For when told a reverse proxy is in front (TRUST_PROXY=1 for one hop).
 const trust = process.env.TRUST_PROXY;
 const app = createApp({
   getGeminiClient: getGenAIClient,
   geminiKey,
+  getAnthropicClient,
+  anthropicKey,
   trustProxy: trust === undefined ? undefined : /^\d+$/.test(trust) ? Number(trust) : trust === 'true',
 });
 

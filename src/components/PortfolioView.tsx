@@ -1,6 +1,6 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { CustomerProfile, RiskLevel } from '../types';
-import { calculateChurnPrediction } from '../lib/churnEngine';
+import { calculateChurnPrediction, aggregatePortfolioMetrics } from '../lib/churnEngine';
 import { CSV_IMPORT_TEMPLATE, importCustomersCsv, MAX_IMPORT_BYTES } from '../lib/csv';
 import { Users, Search, Download, Upload, Plus, ArrowUpRight, Filter, AlertTriangle, ShieldCheck, Clock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -63,26 +63,8 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     });
   }, [portfolio]);
 
-  // Aggregate metrics
-  const aggregateMetrics = useMemo(() => {
-    const total = enrichedPortfolio.length;
-    if (total === 0) return { total: 0, avgRisk: 0, highRiskCount: 0, totalMrrAtRisk: 0 };
-
-    const highRiskCount = enrichedPortfolio.filter((c) => c.prediction.riskLevel === 'High').length;
-    const avgRisk = Math.round(
-      enrichedPortfolio.reduce((acc, c) => acc + c.prediction.churnProbability, 0) / total
-    );
-    const totalMrrAtRisk = enrichedPortfolio
-      .filter((c) => c.prediction.willChurn)
-      .reduce((acc, c) => acc + c.monthlyCharges, 0);
-
-    return {
-      total,
-      avgRisk,
-      highRiskCount,
-      totalMrrAtRisk: Math.round(totalMrrAtRisk),
-    };
-  }, [enrichedPortfolio]);
+  // Aggregate metrics (shared with the AI investigation endpoint's get_segment_metrics tool)
+  const aggregateMetrics = useMemo(() => aggregatePortfolioMetrics(portfolio), [portfolio]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {

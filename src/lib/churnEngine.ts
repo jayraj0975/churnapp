@@ -223,6 +223,25 @@ export function simulateWhatIf(
   return { baselineResult, simulatedResult, probabilityDelta, modeledExposureReduction, newRiskLevel: simulatedResult.riskLevel };
 }
 
+export interface PortfolioMetrics {
+  total: number;
+  avgRisk: number;
+  highRiskCount: number;
+  totalMrrAtRisk: number;
+}
+
+/** Aggregate risk metrics over a set of customers, scored fresh (never cached/stale). */
+export function aggregatePortfolioMetrics(customers: CustomerProfile[]): PortfolioMetrics {
+  if (customers.length === 0) return { total: 0, avgRisk: 0, highRiskCount: 0, totalMrrAtRisk: 0 };
+  const scored = customers.map((c) => calculateChurnPrediction(c));
+  const highRiskCount = scored.filter((p) => p.riskLevel === 'High').length;
+  const avgRisk = Math.round(scored.reduce((acc, p) => acc + p.churnProbability, 0) / scored.length);
+  const totalMrrAtRisk = Math.round(
+    customers.filter((c, i) => scored[i].willChurn).reduce((acc, c) => acc + c.monthlyCharges, 0),
+  );
+  return { total: customers.length, avgRisk, highRiskCount, totalMrrAtRisk };
+}
+
 export interface Lever {
   title: string;
   adjustments: WhatIfAdjustments;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CustomerProfile, PredictionResult, RetentionStrategyResponse } from '../types';
 import { Sparkles, Check, Copy, X, ArrowRight, DollarSign, Clock, ShieldCheck, Mail, Phone } from 'lucide-react';
+import { AskAiPanel } from './AskAiPanel';
 
 interface RetentionModalProps {
   isOpen: boolean;
@@ -10,6 +11,8 @@ interface RetentionModalProps {
   retentionData: RetentionStrategyResponse | null;
   isLoading: boolean;
   onGenerate: () => void;
+  /** The customer being viewed, plus the rest of the portfolio, for the AI investigation tools. */
+  investigationPortfolio: CustomerProfile[];
 }
 
 export const RetentionModal: React.FC<RetentionModalProps> = ({
@@ -20,6 +23,7 @@ export const RetentionModal: React.FC<RetentionModalProps> = ({
   retentionData,
   isLoading,
   onGenerate,
+  investigationPortfolio,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -83,6 +87,8 @@ export const RetentionModal: React.FC<RetentionModalProps> = ({
               <span className="font-semibold text-slate-900">${prediction.annualRevenueAtRisk}</span> / yr of annual billing exposed
             </div>
           </div>
+
+          <AskAiPanel profile={profile} portfolio={investigationPortfolio} />
 
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 space-y-3">

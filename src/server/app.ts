@@ -6,6 +6,8 @@ import { validateAdjustments, validateProfile } from '../lib/validate.ts';
 import type { CustomerProfile, WhatIfAdjustments } from '../types.ts';
 import { buildPrompt, redact, requestGeminiStrategy } from './gemini.ts';
 import type { GeminiLike } from './gemini.ts';
+import { investigate, redact as redactAnthropic } from './anthropic.ts';
+import type { AnthropicLike } from './anthropic.ts';
 import { createRateLimiter } from './rateLimit.ts';
 
 export interface AppOptions {
@@ -13,6 +15,9 @@ export interface AppOptions {
   getGeminiClient?: () => GeminiLike | null;
   /** The configured key, only so it can be scrubbed from log lines. Never sent anywhere. */
   geminiKey?: string;
+  /** Returns the Anthropic client, or null when no key is configured. */
+  getAnthropicClient?: () => AnthropicLike | null;
+  anthropicKey?: string;
   now?: () => number;
   /** General limit for every /api route, per client address. */
   apiLimit?: { windowMs: number; max: number };
@@ -24,6 +29,11 @@ export interface AppOptions {
   /** Ceiling on Gemini calls across all clients, so one instance has a bounded bill. */
   geminiHourlyCap?: number;
   geminiTimeoutMs?: number;
+  /** Stricter limit on the AI-investigation route, per client address. */
+  aiLimit?: { windowMs: number; max: number };
+  /** Ceiling on AI-investigation calls across all clients. */
+  aiHourlyCap?: number;
+  aiTimeoutMs?: number;
   logger?: { warn: (msg: string) => void };
   /** Passed to Express `trust proxy`. Leave unset unless a reverse proxy sits in front. */
   trustProxy?: boolean | number | string;
@@ -48,6 +58,9 @@ export function createApp(opts: AppOptions = {}) {
   const pageLimiter = createRateLimiter({ ...(opts.pageLimit ?? { windowMs: 60_000, max: envInt('PAGE_RATE_LIMIT_PER_MIN', 600) }), now });
   const geminiLimiter = createRateLimiter({ ...(opts.geminiLimit ?? { windowMs: 60_000, max: envInt('GEMINI_RATE_LIMIT_PER_MIN', 5) }), now });
   const geminiHourly = createRateLimiter({ windowMs: 3_600_000, max: opts.geminiHourlyCap ?? envInt('GEMINI_MAX_CALLS_PER_HOUR', 100), now });
+  const aiTimeoutMs = opts.aiTimeoutMs ?? envInt('AI_TIMEOUT_MS', 20_000);
+  const aiLimiter = createRateLimiter({ ...(opts.aiLimit ?? { windowMs: 60_000, max: envInt('AI_RATE_LIMIT_PER_MIN', 5) }), now });
+  const aiHourly = createRateLimiter({ windowMs: 3_600_000, max: opts.aiHourlyCap ?? envInt('AI_MAX_CALLS_PER_HOUR', 50), now });
 
   // A request id on every response, and in every log line, so one request can be followed.
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -123,6 +136,42 @@ export function createApp(opts: AppOptions = {}) {
     }
     res.setHeader('X-Retention-Source', source);
     return res.json(plan ?? buildFallbackStrategy(customer, prediction));
+  });
+
+  // AI investigation: answers a natural-language question about the current portfolio by calling
+  // real, grounded tools (the churn model's own outputs) and reasoning over their results. The
+  // model never computes a probability or dollar figure itself - every number in the response is
+  // copied verbatim from a tool's real return value. Degrades to { available: false } (never an
+  // error) when no key is configured, the call times out, or the model misbehaves.
+  app.post('/api/ai/investigate', async (req, res) => {
+    const { question, portfolio } = req.body ?? {};
+    if (typeof question !== 'string' || question.trim().length === 0 || question.length > 500) {
+      return res.status(400).json({ error: 'question must be a non-empty string of at most 500 characters' });
+    }
+    if (!Array.isArray(portfolio) || portfolio.length > 5000) {
+      return res.status(400).json({ error: 'portfolio must be an array of at most 5000 customers' });
+    }
+    for (const p of portfolio) {
+      const error = validateProfile(p);
+      if (error) return res.status(400).json({ error: `invalid customer in portfolio: ${error}` });
+    }
+
+    const client = opts.getAnthropicClient?.() ?? null;
+    if (!client) {
+      return res.json({ available: false, reason: 'AI investigation unavailable: no API key configured.' });
+    }
+    const key = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    if (!aiLimiter.consume(key).allowed || !aiHourly.consume('all-clients').allowed) {
+      return res.json({ available: false, reason: 'AI investigation unavailable: rate limit reached, try again shortly.' });
+    }
+    try {
+      const result = await investigate(client, question, portfolio as CustomerProfile[], aiTimeoutMs);
+      return res.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`[${res.locals.requestId}] AI investigation failed: ${redactAnthropic(msg, opts.anthropicKey)}`);
+      return res.json({ available: false, reason: 'AI investigation unavailable: the model did not answer.' });
+    }
   });
 
   // JSON errors (malformed or oversized body) instead of Express's default HTML page.

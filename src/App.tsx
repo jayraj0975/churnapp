@@ -267,6 +267,7 @@ export default function App() {
         retentionData={retentionData}
         isLoading={isLoadingRetention}
         onGenerate={handleGenerateRetention}
+        investigationPortfolio={[currentProfile, ...portfolio.filter((c) => c.id !== currentProfile.id)]}
       />
       {/* Offline Connectivity Indicator */}
       <OfflineIndicator />
