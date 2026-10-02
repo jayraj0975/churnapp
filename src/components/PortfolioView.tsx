@@ -2,7 +2,9 @@ import React, { useRef, useState, useMemo } from 'react';
 import { CustomerProfile, RiskLevel } from '../types';
 import { calculateChurnPrediction } from '../lib/churnEngine';
 import { CSV_IMPORT_TEMPLATE, importCustomersCsv, MAX_IMPORT_BYTES } from '../lib/csv';
-import { Users, Search, Download, Upload, Plus, ArrowUpRight, Filter, AlertTriangle, ShieldCheck, Clock } from 'lucide-react';
+import { Users, Search, Download, Upload, Plus, ArrowUpRight, Filter, AlertTriangle, ShieldCheck, Clock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+type SortKey = 'risk' | 'mrr' | 'tenure';
 
 interface PortfolioViewProps {
   portfolio: CustomerProfile[];
@@ -19,6 +21,19 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [riskFilter, setRiskFilter] = useState<'All' | RiskLevel>('All');
+  // Default to highest risk first: a freshly imported batch should already read as a call list,
+  // not require sorting before it's useful.
+  const [sortKey, setSortKey] = useState<SortKey>('risk');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
   const [showAddModal, setShowAddModal] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +94,49 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
       return matchesSearch && matchesRisk;
     });
   }, [enrichedPortfolio, searchTerm, riskFilter]);
+
+  // Sorted for display: lets a retention team work a freshly imported list as a prioritized
+  // call list instead of clicking into each row to learn which ones matter most.
+  const sortedRows = useMemo(() => {
+    const sortValue = (c: (typeof filteredRows)[number]) => {
+      switch (sortKey) {
+        case 'mrr':
+          return c.monthlyCharges;
+        case 'tenure':
+          return c.tenure;
+        case 'risk':
+        default:
+          return c.prediction.churnProbability;
+      }
+    };
+    const sign = sortDir === 'asc' ? 1 : -1;
+    return [...filteredRows].sort((a, b) => sign * (sortValue(a) - sortValue(b)));
+  }, [filteredRows, sortKey, sortDir]);
+
+  const SortHeader: React.FC<{ label: string; sortKeyName: SortKey; className?: string }> = ({
+    label,
+    sortKeyName,
+    className,
+  }) => (
+    <th className={`py-3 px-3 ${className || ''}`}>
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKeyName)}
+        className="inline-flex items-center gap-1 hover:text-slate-900"
+      >
+        <span>{label}</span>
+        {sortKey === sortKeyName ? (
+          sortDir === 'desc' ? (
+            <ArrowDown className="w-3 h-3" />
+          ) : (
+            <ArrowUp className="w-3 h-3" />
+          )
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </button>
+    </th>
+  );
 
   // CSV Export
   const handleExportCSV = () => {
@@ -373,22 +431,22 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             <tr>
               <th className="py-3 px-4">Customer</th>
               <th className="py-3 px-3">Contract</th>
-              <th className="py-3 px-3">Tenure</th>
-              <th className="py-3 px-3">Monthly Charge</th>
+              <SortHeader label="Tenure" sortKeyName="tenure" />
+              <SortHeader label="Monthly Charge" sortKeyName="mrr" />
               <th className="py-3 px-3">Internet & Tech</th>
-              <th className="py-3 px-3">Churn Probability</th>
+              <SortHeader label="Churn Risk" sortKeyName="risk" />
               <th className="py-3 px-3 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredRows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-8 text-slate-400 italic">
                   No customers found matching the search criteria.
                 </td>
               </tr>
             ) : (
-              filteredRows.map((c) => {
+              sortedRows.map((c) => {
                 const pred = c.prediction;
                 return (
                   <tr
@@ -436,6 +494,11 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
                           {pred.riskLevel}
                         </span>
                       </div>
+                      {pred.topRiskDrivers.length > 0 && (
+                        <div className="text-[10px] text-slate-400 mt-0.5 max-w-[16rem] truncate" title={pred.topRiskDrivers[0].description}>
+                          {pred.topRiskDrivers[0].description}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-right">
                       <button
