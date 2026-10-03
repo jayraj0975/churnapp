@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CSV_IMPORT_TEMPLATE, MAX_IMPORT_ROWS, importCustomersCsv, parseCsvRows } from '../src/lib/csv.ts';
+import { CSV_IMPORT_TEMPLATE, MAX_IMPORT_ROWS, csvSafe, importCustomersCsv, parseCsvRows } from '../src/lib/csv.ts';
 
 test('parseCsvRows handles quoted fields with embedded commas and quotes', () => {
   const rows = parseCsvRows('a,b,c\n1,"hello, world",2\n3,"she said ""hi""",4\n');
@@ -69,4 +69,17 @@ test('oversized row count is rejected before per-row processing', () => {
   assert.equal(profiles.length, 0);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /row limit/);
+});
+
+test('csvSafe neutralizes CSV/Excel formula injection without changing ordinary text', () => {
+  // These are real, documented Excel/Sheets formula triggers - a customer name or id imported
+  // from an untrusted CSV must not reach a later export unescaped.
+  for (const malicious of ['=1+1', '=HYPERLINK("http://evil.example","click")', '+1', '-1', '@SUM(1,1)', '\t=1', '\r=1']) {
+    const safe = csvSafe(malicious);
+    assert.ok(safe.startsWith("'"), `expected ${JSON.stringify(malicious)} to be neutralized, got ${JSON.stringify(safe)}`);
+    assert.equal(safe.slice(1), malicious);
+  }
+  for (const benign of ['Alice Johnson', 'CUST-1001', "O'Brien", '']) {
+    assert.equal(csvSafe(benign), benign);
+  }
 });

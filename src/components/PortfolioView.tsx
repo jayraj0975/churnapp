@@ -1,7 +1,7 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { CustomerProfile, RiskLevel } from '../types';
 import { calculateChurnPrediction, aggregatePortfolioMetrics } from '../lib/churnEngine';
-import { CSV_IMPORT_TEMPLATE, importCustomersCsv, MAX_IMPORT_BYTES } from '../lib/csv';
+import { csvSafe, CSV_IMPORT_TEMPLATE, importCustomersCsv, MAX_IMPORT_BYTES } from '../lib/csv';
 import { Users, Search, Download, Upload, Plus, ArrowUpRight, Filter, AlertTriangle, ShieldCheck, Clock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 type SortKey = 'risk' | 'mrr' | 'tenure';
@@ -136,8 +136,8 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     ];
 
     const rows = filteredRows.map((c) => [
-      c.id,
-      `"${c.name}"`,
+      `"${csvSafe(c.id)}"`,
+      `"${csvSafe(c.name)}"`,
       c.tenure,
       c.monthlyCharges.toFixed(2),
       `"${c.contract}"`,

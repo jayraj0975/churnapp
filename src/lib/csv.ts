@@ -126,6 +126,15 @@ export function importCustomersCsv(text: string): ImportResult {
   return { profiles, errors };
 }
 
+/** Neutralizes CSV/Excel formula injection: a cell whose content starts with =, +, -, @, tab
+ * or CR is interpreted as a formula by Excel/Sheets even when quoted in the raw CSV text, so a
+ * customer name or id imported from an untrusted CSV could execute code when a later export of
+ * that data is opened in a spreadsheet. Prefixing with a plain single quote keeps the visible
+ * text identical while forcing spreadsheet apps to treat it as literal text. */
+export function csvSafe(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 const TEMPLATE_HEADER =
   'id,name,tenure,monthlyCharges,contract,internetService,paymentMethod,totalCharges,onlineSecurity,onlineBackup,deviceProtection,techSupport,streamingTV,streamingMovies,paperlessBilling,seniorCitizen,partner,dependents,phoneService,multipleLines';
 const TEMPLATE_EXAMPLE =
