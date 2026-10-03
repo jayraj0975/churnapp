@@ -1,52 +1,54 @@
 import type { CustomerProfile, WhatIfAdjustments } from '../types';
 import { calculateChurnPrediction, aggregatePortfolioMetrics, simulateWhatIf } from '../lib/churnEngine';
-import { withTimeout, redact as redactGeneric } from './gemini';
+import { withTimeout, redact } from './gemini';
 
-/** The one method of the Anthropic SDK this app uses, so tests can substitute a fake. */
-export interface AnthropicLike {
-  messages: {
-    create(args: {
+export { redact };
+
+/** The one method of the Gemini SDK this agent uses, so tests can substitute a fake. */
+export interface GeminiAgentLike {
+  models: {
+    generateContent(args: {
       model: string;
-      max_tokens: number;
-      system: string;
-      messages: AnthropicMessage[];
-      tools: AnthropicToolDef[];
-    }): Promise<AnthropicResponse>;
+      contents: GContent[];
+      config: { systemInstruction: string; tools: [{ functionDeclarations: GFunctionDeclaration[] }] };
+    }): Promise<{
+      functionCalls?: GFunctionCall[];
+      text?: string;
+      /** The real client's raw candidate - echo this back verbatim on the next turn (it carries a
+       *  thoughtSignature Gemini requires; reconstructing the turn by hand drops it and the next
+       *  call fails with 400). Test doubles that skip this fall back to manual reconstruction. */
+      candidates?: { content: GContent }[];
+    }>;
   };
 }
 
-export interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: AnthropicContentBlock[];
+export interface GContent {
+  role: 'user' | 'model';
+  parts: GPart[];
 }
 
-export type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string };
+export type GPart =
+  | { text: string }
+  | { functionCall: GFunctionCall }
+  | { functionResponse: { id?: string; name: string; response: Record<string, unknown> } };
 
-export interface AnthropicToolDef {
+export interface GFunctionCall {
+  id?: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface GFunctionDeclaration {
   name: string;
   description: string;
-  input_schema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+  parametersJsonSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
 }
 
-export interface AnthropicResponse {
-  content: AnthropicContentBlock[];
-  stop_reason: string;
-  usage?: { input_tokens: number; output_tokens: number };
-}
-
-export const ANTHROPIC_MODEL = process.env.CHURN_AI_MODEL || 'claude-sonnet-4-5-20250929';
+export const GEMINI_AGENT_MODEL = process.env.CHURN_AI_MODEL || 'gemini-3.8-flash';
 const MAX_TOOL_TURNS = 6;
 
-/** Removes anything that looks like an API key from text that will be logged. */
-export function redact(text: string, secret?: string): string {
-  return redactGeneric(text, secret).replace(/sk-ant-[0-9A-Za-z_-]{20,}/g, '[redacted]');
-}
-
 // --- Real, grounded tools. Each returns actual computed data or an explicit not-found marker;
-// none of them ever invent a customer, driver or number. ---
+// none of them ever invent a customer, driver or number. Unchanged from the prior provider. ---
 
 function findCustomer(portfolio: CustomerProfile[], id: string): CustomerProfile | undefined {
   return portfolio.find((c) => c.id === id);
@@ -99,26 +101,26 @@ function toolSimulateRetention(portfolio: CustomerProfile[], customerId: string,
   };
 }
 
-const TOOLS: AnthropicToolDef[] = [
+const TOOLS: GFunctionDeclaration[] = [
   {
     name: 'get_customer_risk',
     description: "Get a customer's real, model-computed churn risk from the current portfolio.",
-    input_schema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
+    parametersJsonSchema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
   },
   {
     name: 'explain_prediction',
     description: "Get the full real driver breakdown (top risk drivers and protective factors, with their model-computed impact percentages) for a customer.",
-    input_schema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
+    parametersJsonSchema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
   },
   {
     name: 'get_segment_metrics',
     description: 'Get real aggregate risk metrics (average risk, high-risk count, monthly billing at risk) over the current portfolio, optionally filtered to one risk level (Low, Moderate, High).',
-    input_schema: { type: 'object', properties: { riskLevel: { type: 'string', enum: ['Low', 'Moderate', 'High'] } } },
+    parametersJsonSchema: { type: 'object', properties: { riskLevel: { type: 'string', enum: ['Low', 'Moderate', 'High'] } } },
   },
   {
     name: 'simulate_retention',
     description: 'Run the real what-if model for a customer with proposed changes (e.g. add tech support, switch to a longer contract) and get the real resulting probability change. Never estimate this yourself - always call this tool.',
-    input_schema: {
+    parametersJsonSchema: {
       type: 'object',
       properties: {
         customerId: { type: 'string' },
@@ -133,7 +135,7 @@ const TOOLS: AnthropicToolDef[] = [
   {
     name: 'submit_answer',
     description: 'Finish the investigation and give your structured final answer. Call this exactly once, as the last step.',
-    input_schema: {
+    parametersJsonSchema: {
       type: 'object',
       properties: {
         interpretation: { type: 'string', description: 'Your plain-language synthesis of what the real data shows.' },
@@ -180,25 +182,29 @@ Always finish by calling submit_answer exactly once.`;
  * text, so the model cannot cause a different number to be reported.
  */
 export async function investigate(
-  client: AnthropicLike,
+  client: GeminiAgentLike,
   question: string,
   portfolio: CustomerProfile[],
   timeoutMs: number,
 ): Promise<InvestigationResult> {
-  const messages: AnthropicMessage[] = [{ role: 'user', content: [{ type: 'text', text: question }] }];
+  const contents: GContent[] = [{ role: 'user', parts: [{ text: question }] }];
   const toolCalls: ToolCallRecord[] = [];
   let modelSignal: unknown | null = null;
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     const response = await withTimeout(
-      client.messages.create({ model: ANTHROPIC_MODEL, max_tokens: 1024, system: SYSTEM_PROMPT, messages, tools: TOOLS }),
+      client.models.generateContent({
+        model: GEMINI_AGENT_MODEL,
+        contents,
+        config: { systemInstruction: SYSTEM_PROMPT, tools: [{ functionDeclarations: TOOLS }] },
+      }),
       timeoutMs,
     );
 
-    const toolUses = response.content.filter((b): b is Extract<AnthropicContentBlock, { type: 'tool_use' }> => b.type === 'tool_use');
-    const submit = toolUses.find((t) => t.name === 'submit_answer');
+    const calls = response.functionCalls ?? [];
+    const submit = calls.find((c) => c.name === 'submit_answer');
     if (submit) {
-      const input = submit.input as { interpretation?: unknown; recommendedAction?: unknown; confidence?: unknown };
+      const input = submit.args as { interpretation?: unknown; recommendedAction?: unknown; confidence?: unknown };
       if (typeof input.interpretation !== 'string' || typeof input.recommendedAction !== 'string') {
         throw new Error('submit_answer did not match the expected shape');
       }
@@ -206,23 +212,24 @@ export async function investigate(
       return { available: true, question, toolCalls, modelSignal, interpretation: input.interpretation, recommendedAction: input.recommendedAction, confidence };
     }
 
-    if (toolUses.length === 0) {
+    if (calls.length === 0) {
       // No tool call and no submit_answer: treat any text as the interpretation, ungrounded.
-      const text = response.content.find((b): b is Extract<AnthropicContentBlock, { type: 'text' }> => b.type === 'text')?.text ?? '';
-      return { available: true, question, toolCalls, modelSignal, interpretation: text, recommendedAction: '', confidence: null };
+      return { available: true, question, toolCalls, modelSignal, interpretation: response.text ?? '', recommendedAction: '', confidence: null };
     }
 
-    messages.push({ role: 'assistant', content: response.content });
-    const resultBlocks: AnthropicContentBlock[] = [];
-    for (const call of toolUses) {
-      const output = runTool(call.name, call.input, portfolio);
-      toolCalls.push({ name: call.name, input: call.input, output });
+    // Echo the real client's own candidate content back verbatim when available - it carries a
+    // thoughtSignature the API requires on the next turn. Only hand-reconstruct for test doubles.
+    contents.push(response.candidates?.[0]?.content ?? { role: 'model', parts: calls.map((c) => ({ functionCall: c })) });
+    const resultParts: GPart[] = [];
+    for (const call of calls) {
+      const output = runTool(call.name, call.args, portfolio);
+      toolCalls.push({ name: call.name, input: call.args, output });
       if (call.name !== 'submit_answer' && !(output && typeof output === 'object' && 'error' in output)) {
         modelSignal = output;
       }
-      resultBlocks.push({ type: 'tool_result', tool_use_id: call.id, content: JSON.stringify(output) });
+      resultParts.push({ functionResponse: { id: call.id, name: call.name, response: { output } } });
     }
-    messages.push({ role: 'user', content: resultBlocks });
+    contents.push({ role: 'user', parts: resultParts });
   }
 
   throw new Error(`Investigation did not reach an answer within ${MAX_TOOL_TURNS} tool turns`);

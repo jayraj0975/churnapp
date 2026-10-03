@@ -6,8 +6,8 @@ import { validateAdjustments, validateProfile } from '../lib/validate.ts';
 import type { CustomerProfile, WhatIfAdjustments } from '../types.ts';
 import { buildPrompt, redact, requestGeminiStrategy } from './gemini.ts';
 import type { GeminiLike } from './gemini.ts';
-import { investigate, redact as redactAnthropic } from './anthropic.ts';
-import type { AnthropicLike } from './anthropic.ts';
+import { investigate } from './gemini-investigate.ts';
+import type { GeminiAgentLike } from './gemini-investigate.ts';
 import { createRateLimiter } from './rateLimit.ts';
 
 export interface AppOptions {
@@ -15,9 +15,10 @@ export interface AppOptions {
   getGeminiClient?: () => GeminiLike | null;
   /** The configured key, only so it can be scrubbed from log lines. Never sent anywhere. */
   geminiKey?: string;
-  /** Returns the Anthropic client, or null when no key is configured. */
-  getAnthropicClient?: () => AnthropicLike | null;
-  anthropicKey?: string;
+  /** Returns the Gemini client for the tool-calling investigator, or null when no key is configured.
+   *  Same underlying client/key as getGeminiClient in practice - split only because the two features
+   *  need different mock shapes in tests (plain JSON generation vs. tool-calling). */
+  getGeminiAgentClient?: () => GeminiAgentLike | null;
   now?: () => number;
   /** General limit for every /api route, per client address. */
   apiLimit?: { windowMs: number; max: number };
@@ -156,7 +157,7 @@ export function createApp(opts: AppOptions = {}) {
       if (error) return res.status(400).json({ error: `invalid customer in portfolio: ${error}` });
     }
 
-    const client = opts.getAnthropicClient?.() ?? null;
+    const client = opts.getGeminiAgentClient?.() ?? null;
     if (!client) {
       return res.json({ available: false, reason: 'AI investigation unavailable: no API key configured.' });
     }
@@ -169,7 +170,7 @@ export function createApp(opts: AppOptions = {}) {
       return res.json(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`[${res.locals.requestId}] AI investigation failed: ${redactAnthropic(msg, opts.anthropicKey)}`);
+      log.warn(`[${res.locals.requestId}] AI investigation failed: ${redact(msg, opts.geminiKey)}`);
       return res.json({ available: false, reason: 'AI investigation unavailable: the model did not answer.' });
     }
   });
