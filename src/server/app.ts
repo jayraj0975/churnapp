@@ -69,6 +69,10 @@ export function createApp(opts: AppOptions = {}) {
     const id = incoming && /^[A-Za-z0-9._-]{1,64}$/.test(incoming) ? incoming : randomUUID();
     res.locals.requestId = id;
     res.setHeader('X-Request-ID', id);
+    // Basic hardening on every response (the Vercel deploy sets the same in vercel.json, plus a content policy).
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     next();
   });
 
