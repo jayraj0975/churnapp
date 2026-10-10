@@ -131,8 +131,13 @@ export function importCustomersCsv(text: string): ImportResult {
  * customer name or id imported from an untrusted CSV could execute code when a later export of
  * that data is opened in a spreadsheet. Prefixing with a plain single quote keeps the visible
  * text identical while forcing spreadsheet apps to treat it as literal text. */
+/**
+ * Text for a double-quoted CSV cell. A leading formula character is neutralised (spreadsheets run "=...", "+...",
+ * "-...", "@..." as formulas), and every quote is doubled so a value cannot close its cell early and start a new
+ * one: `x","=HYPERLINK(...)` would otherwise put a live formula in the next column.
+ */
 export function csvSafe(value: string): string {
-  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value).replace(/"/g, '""');
 }
 
 const TEMPLATE_HEADER =

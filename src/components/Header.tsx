@@ -1,10 +1,10 @@
 import React from 'react';
 import { CUSTOMER_PRESETS } from '../lib/churnEngine';
 import { CustomerProfile } from '../types';
-import { Activity, Sliders, Users, Brain, ShieldAlert, Sparkles, Zap } from 'lucide-react';
+import { Activity, Sliders, Users, Brain, ShieldAlert, Sparkles, Zap, Wallet } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
-export type ActiveTab = 'predictor' | 'what-if' | 'portfolio' | 'model';
+export type ActiveTab = 'predictor' | 'what-if' | 'portfolio' | 'plan' | 'model';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -113,6 +113,19 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Users className="w-4 h-4" />
             <span>Cohort Portfolio Monitor</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('plan')}
+            className={`pb-3 pt-1 text-xs font-semibold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+              activeTab === 'plan'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Wallet className="w-4 h-4" />
+            <span>Retention Budget Planner</span>
           </button>
 
           <button

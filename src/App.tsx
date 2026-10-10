@@ -7,6 +7,7 @@ import { PredictionGauge } from './components/PredictionGauge';
 import { FeatureContributions } from './components/FeatureContributions';
 import { RetentionModal } from './components/RetentionModal';
 import { WhatIfSimulator } from './components/WhatIfSimulator';
+import { RetentionPlanner } from './components/RetentionPlanner';
 import { PortfolioView } from './components/PortfolioView';
 import { ModelDiagnostics } from './components/ModelDiagnostics';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -247,6 +248,10 @@ export default function App() {
             onAddCustomer={handleAddPortfolioCustomer}
             onImportCustomers={handleAddPortfolioCustomers}
           />
+        )}
+
+        {activeTab === 'plan' && (
+          <RetentionPlanner portfolio={portfolio} onSelectCustomer={handleSelectPortfolioCustomer} />
         )}
 
         {/* Tab 4: Model Diagnostics & Explainability */}
