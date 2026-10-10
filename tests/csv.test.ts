@@ -77,9 +77,17 @@ test('csvSafe neutralizes CSV/Excel formula injection without changing ordinary 
   for (const malicious of ['=1+1', '=HYPERLINK("http://evil.example","click")', '+1', '-1', '@SUM(1,1)', '\t=1', '\r=1']) {
     const safe = csvSafe(malicious);
     assert.ok(safe.startsWith("'"), `expected ${JSON.stringify(malicious)} to be neutralized, got ${JSON.stringify(safe)}`);
-    assert.equal(safe.slice(1), malicious);
+    assert.equal(safe.slice(1), malicious.replace(/"/g, '""')); // quotes are doubled for the quoted cell
   }
   for (const benign of ['Alice Johnson', 'CUST-1001', "O'Brien", '']) {
     assert.equal(csvSafe(benign), benign);
   }
+});
+
+test('csvSafe doubles quotes, so a value can never close its cell and start a formula in the next one', () => {
+  const evil = 'x","=HYPERLINK(""http://evil"",""click"")';
+  const cell = `"${csvSafe(evil)}"`;
+  // Parsed back as CSV, it is still one cell with the original text, and nothing else.
+  assert.deepEqual(parseCsvRows(`${cell}\n`)[0], [evil]);
+  assert.equal(csvSafe('Ann "Annie" Lee'), 'Ann ""Annie"" Lee');
 });
