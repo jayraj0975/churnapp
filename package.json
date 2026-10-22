@@ -24,15 +24,15 @@
     "check": "npm run lint && npm test"
   },
   "dependencies": {
-    "@google/genai": "^2.27.0",
+    "@google/genai": "^2.30.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^6.1.2",
-    "dotenv": "^18.0.5",
+    "dotenv": "^18.0.8",
     "express": "^5.2.1",
-    "lucide-react": "^1.52.0",
-    "motion": "^14.0.0",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1"
+    "lucide-react": "^1.59.0",
+    "motion": "^14.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
