@@ -25,24 +25,24 @@
   },
   "dependencies": {
     "@google/genai": "^2.27.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^6.1.2",
-    "dotenv": "^18.0.5",
+    "@tailwindcss/vite": "^4.3.5",
+    "@vitejs/plugin-react": "^6.3.0",
+    "dotenv": "^18.0.10",
     "express": "^5.2.1",
-    "lucide-react": "^1.52.0",
-    "motion": "^14.0.0",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1"
+    "lucide-react": "^1.70.0",
+    "motion": "^14.11.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^26.6.4",
-    "autoprefixer": "^10.4.21",
+    "@types/node": "^26.6.6",
+    "autoprefixer": "^10.6.2",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
-    "vite": "^8.3.2",
+    "vite": "^8.3.7",
     "vite-plugin-pwa": "^2.0.0"
   }
 }
